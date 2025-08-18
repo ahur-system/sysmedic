@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+# postrm script for sysmedic
+# see: dh_installdeb(1)
+
+case "$1" in
+    purge)
+        # Remove user and group
+        if getent passwd sysmedic >/dev/null; then
+            deluser --system sysmedic || true
+        fi
+
+        if getent group sysmedic >/dev/null; then
+            delgroup --system sysmedic || true
+        fi
+
+        # Remove configuration files and data
+        rm -rf /etc/sysmedic
+        rm -rf /var/lib/sysmedic
+        rm -rf /var/log/sysmedic
+
+        # Remove systemd service file
+        rm -f /etc/systemd/system/sysmedic.service
+
+        # Reload systemd
+        systemctl daemon-reload || true
+
+        echo "SysMedic has been completely removed from the system."
+        ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Reload systemd daemon to clean up
+        systemctl daemon-reload || true
+        ;;
+
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

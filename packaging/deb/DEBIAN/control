@@ -1,0 +1,23 @@
+Package: sysmedic
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: systemd
+Maintainer: SysMedic Team <support@sysmedic.io>
+Description: Advanced Linux system monitoring and diagnostic tool
+ SysMedic is a comprehensive system monitoring tool that provides real-time
+ insights into system performance, resource usage, and health metrics.
+ .
+ Features:
+  - Real-time CPU, memory, disk, and network monitoring
+  - System health diagnostics and alerts
+  - Historical data collection and analysis
+  - Web-based dashboard interface
+  - RESTful API for integration
+  - Configurable monitoring intervals and thresholds
+  - Systemd service integration
+ .
+ SysMedic helps system administrators proactively monitor their Linux systems
+ and quickly identify performance bottlenecks or potential issues.
+Homepage: https://github.com/ahur-system/sysmedic

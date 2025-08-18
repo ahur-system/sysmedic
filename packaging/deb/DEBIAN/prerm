@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+# prerm script for sysmedic
+# see: dh_installdeb(1)
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Stop the service if it's running
+        if systemctl is-active --quiet sysmedic.service; then
+            echo "Stopping sysmedic service..."
+            systemctl stop sysmedic.service
+        fi
+
+        # Disable the service if it's enabled
+        if systemctl is-enabled --quiet sysmedic.service; then
+            echo "Disabling sysmedic service..."
+            systemctl disable sysmedic.service
+        fi
+        ;;
+
+    failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

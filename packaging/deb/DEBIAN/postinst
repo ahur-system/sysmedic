@@ -1,0 +1,91 @@
+#!/bin/bash
+set -e
+
+# postinst script for sysmedic
+# see: dh_installdeb(1)
+
+case "$1" in
+    configure)
+        # Create sysmedic user and group if they don't exist
+        if ! getent group sysmedic >/dev/null; then
+            addgroup --system sysmedic
+        fi
+
+        if ! getent passwd sysmedic >/dev/null; then
+            adduser --system --ingroup sysmedic --home /var/lib/sysmedic \
+                    --no-create-home --shell /bin/false sysmedic
+        fi
+
+        # Create necessary directories
+        mkdir -p /etc/sysmedic
+        mkdir -p /var/lib/sysmedic
+        mkdir -p /var/log/sysmedic
+
+        # Set proper ownership and permissions
+        chown -R sysmedic:sysmedic /var/lib/sysmedic
+        chown -R sysmedic:sysmedic /var/log/sysmedic
+        chmod 755 /etc/sysmedic
+        chmod 750 /var/lib/sysmedic
+        chmod 750 /var/log/sysmedic
+
+        # Create default config if it doesn't exist
+        if [ ! -f /etc/sysmedic/config.yaml ]; then
+            cat > /etc/sysmedic/config.yaml << 'EOF'
+# SysMedic Configuration
+server:
+  host: "127.0.0.1"
+  port: 8080
+  tls:
+    enabled: false
+
+monitoring:
+  interval: 5s
+  metrics:
+    cpu: true
+    memory: true
+    disk: true
+    network: true
+    processes: true
+
+storage:
+  type: "file"
+  path: "/var/lib/sysmedic/data"
+  retention: "30d"
+
+logging:
+  level: "info"
+  file: "/var/log/sysmedic/sysmedic.log"
+  max_size: "100MB"
+  max_files: 5
+
+alerts:
+  enabled: true
+  thresholds:
+    cpu_usage: 80
+    memory_usage: 85
+    disk_usage: 90
+EOF
+            chown sysmedic:sysmedic /etc/sysmedic/config.yaml
+            chmod 640 /etc/sysmedic/config.yaml
+        fi
+
+        # Reload systemd and enable service
+        systemctl daemon-reload
+        systemctl enable sysmedic.service
+
+        echo "SysMedic has been installed successfully!"
+        echo "Configuration file: /etc/sysmedic/config.yaml"
+        echo "Start the service with: sudo systemctl start sysmedic"
+        echo "View logs with: sudo journalctl -u sysmedic -f"
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
