@@ -1,0 +1,95 @@
+# SysMedic Configuration File
+# Copy this to /etc/sysmedic/config.yaml and modify as needed
+
+# System monitoring settings
+monitoring:
+  check_interval: 60          # How often to check system metrics (seconds)
+  cpu_threshold: 80           # System-wide CPU threshold (%)
+  memory_threshold: 80        # System-wide memory threshold (%)
+  persistent_time: 60         # Minutes before flagging persistent usage
+
+# Default user monitoring settings
+users:
+  cpu_threshold: 80           # Default per-user CPU threshold (%)
+  memory_threshold: 80        # Default per-user memory threshold (%)
+  persistent_time: 60         # Minutes before flagging user as persistent
+
+# Reporting and data retention
+reporting:
+  period: "hourly"            # Default report period (hourly/daily/weekly)
+  retain_days: 30             # Days to keep historical data
+
+# Email notification settings
+email:
+  enabled: false              # Enable/disable email alerts
+  smtp_host: "smtp.gmail.com" # SMTP server hostname
+  smtp_port: 587              # SMTP server port
+  username: ""                # SMTP username (usually your email)
+  password: ""                # SMTP password (use app password for Gmail)
+  from: "sysmedic@yourdomain.com"  # From address
+  to: "admin@yourdomain.com"       # Alert recipient
+  tls: true                   # Use TLS encryption
+
+# Per-user custom thresholds
+# Override default thresholds for specific users
+user_thresholds:
+  # Example: Database user with higher CPU tolerance
+  database_user:
+    cpu_threshold: 90         # Allow higher CPU usage
+    memory_threshold: 70      # But stricter memory limits
+    persistent_time: 90       # Longer time before flagging
+
+  # Example: Development user with relaxed limits
+  dev_user:
+    cpu_threshold: 95
+    memory_threshold: 90
+    persistent_time: 120
+
+  # Example: Critical service user with very strict limits
+  critical_service:
+    cpu_threshold: 60
+    memory_threshold: 60
+    persistent_time: 30       # Flag quickly if issues arise
+
+# Configuration Examples:
+#
+# Low-resource server (adjust thresholds):
+#   cpu_threshold: 60
+#   memory_threshold: 70
+#
+# High-performance server (relaxed thresholds):
+#   cpu_threshold: 90
+#   memory_threshold: 85
+#
+# Development environment (very relaxed):
+#   cpu_threshold: 95
+#   memory_threshold: 95
+#   persistent_time: 180
+#
+# Production server (strict monitoring):
+#   cpu_threshold: 75
+#   memory_threshold: 75
+#   persistent_time: 30
+#   check_interval: 30        # More frequent checks
+#
+# Email setup for Gmail:
+#   email:
+#     enabled: true
+#     smtp_host: "smtp.gmail.com"
+#     smtp_port: 587
+#     username: "your-email@gmail.com"
+#     password: "your-app-password"  # Generate at https://myaccount.google.com/apppasswords
+#     from: "sysmedic-alerts@yourdomain.com"
+#     to: "sysadmin@yourdomain.com"
+#     tls: true
+#
+# Email setup for corporate Exchange:
+#   email:
+#     enabled: true
+#     smtp_host: "mail.company.com"
+#     smtp_port: 587
+#     username: "sysmedic@company.com"
+#     password: "password"
+#     from: "sysmedic@company.com"
+#     to: "it-alerts@company.com"
+#     tls: true

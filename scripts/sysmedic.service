@@ -1,0 +1,52 @@
+[Unit]
+Description=SysMedic System Monitoring Daemon
+Documentation=https://github.com/sysmedic/sysmedic
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/sysmedic daemon start
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/usr/local/bin/sysmedic daemon stop
+PIDFile=/var/run/sysmedic.pid
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sysmedic /etc/sysmedic /var/run
+PrivateTmp=true
+PrivateDevices=false
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictNamespaces=true
+
+# Allow access to system monitoring files
+ReadOnlyPaths=/proc /sys
+
+# Environment
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=SYSMEDIC_CONFIG=/etc/sysmedic/config.yaml
+Environment=SYSMEDIC_DATA=/var/lib/sysmedic
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sysmedic
+
+[Install]
+WantedBy=multi-user.target
