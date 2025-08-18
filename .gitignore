@@ -102,3 +102,5 @@ Thumbs.db
 # Demo and development files
 demo_config.yaml
 /tmp/
+
+PUBLISH.md

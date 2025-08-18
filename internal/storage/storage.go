@@ -7,7 +7,7 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/sysmedic/sysmedic/internal/monitor"
+	"github.com/ahur-system/sysmedic/internal/monitor"
 )
 
 // Storage handles database operations for SysMedic

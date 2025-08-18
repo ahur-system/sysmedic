@@ -1,4 +1,4 @@
-module github.com/sysmedic/sysmedic
+module github.com/ahur-system/sysmedic
 
 go 1.18
 

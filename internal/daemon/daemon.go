@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sysmedic/sysmedic/internal/alerts"
-	"github.com/sysmedic/sysmedic/internal/config"
-	"github.com/sysmedic/sysmedic/internal/monitor"
-	"github.com/sysmedic/sysmedic/internal/storage"
+	"github.com/ahur-system/sysmedic/internal/alerts"
+	"github.com/ahur-system/sysmedic/internal/config"
+	"github.com/ahur-system/sysmedic/internal/monitor"
+	"github.com/ahur-system/sysmedic/internal/storage"
 )
 
 // Daemon represents the SysMedic background monitoring daemon

@@ -24,7 +24,7 @@
 **Download Binary:**
 ```bash
 # Download latest release
-wget https://github.com/sysmedic/sysmedic/releases/latest/download/sysmedic-linux-amd64.tar.gz
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-linux-amd64.tar.gz
 tar -xzf sysmedic-linux-amd64.tar.gz
 sudo mv sysmedic /usr/local/bin/
 sudo chmod +x /usr/local/bin/sysmedic
@@ -32,7 +32,7 @@ sudo chmod +x /usr/local/bin/sysmedic
 
 **From Source:**
 ```bash
-git clone https://github.com/sysmedic/sysmedic.git
+git clone https://github.com/ahur-system/sysmedic.git
 cd sysmedic
 make build
 sudo make install
@@ -205,7 +205,7 @@ Heavy Load:   System > 80% OR any user persistent (60+ min) above threshold
 
 **Build:**
 ```bash
-git clone https://github.com/sysmedic/sysmedic.git
+git clone https://github.com/ahur-system/sysmedic.git
 cd sysmedic
 make deps
 make build
@@ -231,7 +231,7 @@ make release      # Full release build
 
 ### Ubuntu/Debian (.deb)
 ```bash
-wget https://github.com/sysmedic/sysmedic/releases/latest/download/sysmedic-amd64.deb
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb
 sudo dpkg -i sysmedic-amd64.deb
 sudo systemctl enable sysmedic
 sudo systemctl start sysmedic
@@ -239,7 +239,7 @@ sudo systemctl start sysmedic
 
 ### RHEL/CentOS (.rpm)
 ```bash
-wget https://github.com/sysmedic/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
 sudo rpm -i sysmedic-x86_64.rpm
 sudo systemctl enable sysmedic
 sudo systemctl start sysmedic
@@ -247,7 +247,7 @@ sudo systemctl start sysmedic
 
 ### Generic Linux (tar.gz)
 ```bash
-wget https://github.com/sysmedic/sysmedic/releases/latest/download/sysmedic-linux-amd64.tar.gz
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-linux-amd64.tar.gz
 tar -xzf sysmedic-linux-amd64.tar.gz
 cd sysmedic-*
 sudo ./scripts/install.sh
@@ -345,9 +345,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Documentation**: [GitHub Wiki](https://github.com/sysmedic/sysmedic/wiki)
-- **Issues**: [GitHub Issues](https://github.com/sysmedic/sysmedic/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/sysmedic/sysmedic/discussions)
+- **Documentation**: [GitHub Wiki](https://github.com/ahur-system/sysmedic/wiki)
+- **Issues**: [GitHub Issues](https://github.com/ahur-system/sysmedic/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ahur-system/sysmedic/discussions)
 
 ## Roadmap
 

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/sysmedic/sysmedic/pkg/cli"
+	"github.com/ahur-system/sysmedic/pkg/cli"
 )
 
 var (

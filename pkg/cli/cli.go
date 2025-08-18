@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sysmedic/sysmedic/internal/config"
-	"github.com/sysmedic/sysmedic/internal/daemon"
-	"github.com/sysmedic/sysmedic/internal/monitor"
-	"github.com/sysmedic/sysmedic/internal/storage"
+	"github.com/ahur-system/sysmedic/internal/config"
+	"github.com/ahur-system/sysmedic/internal/daemon"
+	"github.com/ahur-system/sysmedic/internal/monitor"
+	"github.com/ahur-system/sysmedic/internal/storage"
 )
 
 // ShowDashboard displays the main system dashboard
