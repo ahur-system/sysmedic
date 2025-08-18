@@ -1,5 +1,5 @@
 Name:           sysmedic
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Advanced Linux system monitoring and diagnostic tool
 License:        MIT
@@ -176,6 +176,12 @@ fi
 %dir %attr(750,sysmedic,sysmedic) /var/log/sysmedic
 
 %changelog
+* Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.1-1
+- Critical fix: Replace go-sqlite3 with pure Go SQLite driver
+- Resolves CGO dependency issues that caused runtime failures
+- Ensures compatibility across all Linux distributions
+- Fixes "Binary was compiled with CGO_ENABLED=0" error
+
 * Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.0-1
 - Initial release
 - Real-time system monitoring capabilities

@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.0"
+VERSION="1.0.1"
 TAG="v${VERSION}"
 RELEASE_TITLE="SysMedic v${VERSION}"
 
@@ -36,13 +36,25 @@ print_error() {
 }
 
 # Release notes
-RELEASE_NOTES="# SysMedic v${VERSION} - Initial Release
+RELEASE_NOTES="# SysMedic v${VERSION} - Critical SQLite Fix
 
-## 🎉 Welcome to SysMedic!
+## 🚨 CRITICAL BUGFIX RELEASE
 
-SysMedic is a comprehensive Linux system monitoring and diagnostic tool that provides real-time insights into system performance, resource usage, and health metrics.
+This release fixes a critical runtime error that prevented SysMedic from starting on most Linux systems.
 
-## ✨ Features
+### 🔧 Fixed Issues
+- **CRITICAL**: Fixed \"Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work\" error
+- **Database**: Replaced go-sqlite3 with pure Go SQLite driver for true static compilation
+- **Compatibility**: Now works on all Linux distributions without CGO dependencies
+- **Runtime**: Eliminates SQLite-related startup failures on AlmaLinux, RHEL, CentOS, and other distributions
+
+### 📦 What Changed
+- Switched from github.com/mattn/go-sqlite3 to github.com/glebarez/go-sqlite
+- Updated SQLite driver name from sqlite3 to sqlite
+- Maintained full database compatibility and functionality
+- Binary size increased slightly (~9.5MB) due to embedded SQLite implementation
+
+## ✨ Features (unchanged)
 
 - 📊 **Real-time Monitoring**: CPU, memory, disk, and network monitoring
 - 🔍 **System Diagnostics**: Advanced health checks and performance analysis
@@ -179,7 +191,14 @@ If you encounter any issues:
 
 ## 📝 Changelog
 
-### v${VERSION} (Initial Release)
+### v${VERSION} (Critical Fix)
+- 🚨 **CRITICAL FIX**: Replaced go-sqlite3 with pure Go SQLite driver
+- 🔧 **FIXED**: \"CGO_ENABLED=0\" runtime error on all Linux distributions
+- ✅ **VERIFIED**: Now works on AlmaLinux, RHEL, CentOS, Ubuntu, Debian, and more
+- 📦 **IMPROVED**: True static compilation without CGO dependencies
+- 🛡️ **ENHANCED**: Better portability and deployment reliability
+
+### v1.0.0 (Initial Release)
 - ✨ Initial public release
 - 📊 Real-time system monitoring
 - 🌐 Web dashboard interface

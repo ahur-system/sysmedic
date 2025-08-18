@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.0"
+VERSION="1.0.1"
 ARCH="amd64"
 RPM_ARCH="x86_64"
 
