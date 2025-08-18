@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.1"
+VERSION="1.0.2"
 TAG="v${VERSION}"
 RELEASE_TITLE="SysMedic v${VERSION}"
 
@@ -36,23 +36,36 @@ print_error() {
 }
 
 # Release notes
-RELEASE_NOTES="# SysMedic v${VERSION} - Critical SQLite Fix
+RELEASE_NOTES="# SysMedic v${VERSION} - Enhanced User Monitoring
 
-## 🚨 CRITICAL BUGFIX RELEASE
+## 🎯 MAJOR IMPROVEMENT: Smart User Filtering
 
-This release fixes a critical runtime error that prevented SysMedic from starting on most Linux systems.
+This release transforms SysMedic from tracking all users (including system users) to intelligently focusing on real users causing actual problems.
 
-### 🔧 Fixed Issues
-- **CRITICAL**: Fixed \"Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work\" error
-- **Database**: Replaced go-sqlite3 with pure Go SQLite driver for true static compilation
-- **Compatibility**: Now works on all Linux distributions without CGO dependencies
-- **Runtime**: Eliminates SQLite-related startup failures on AlmaLinux, RHEL, CentOS, and other distributions
+### ✨ Key Improvements
+- **Real Usernames**: Displays actual usernames instead of cryptic \"uid_[id]\" format
+- **Smart Filtering**: Automatically excludes system users (root, daemon, sshd, etc.)
+- **Problem Focus**: Only tracks users with significant resource usage (>5% CPU/memory)
+- **Configurable**: Full control over which users to monitor or ignore
+- **Actionable Data**: Reports now highlight actual problematic users, not system processes
 
-### 📦 What Changed
-- Switched from github.com/mattn/go-sqlite3 to github.com/glebarez/go-sqlite
-- Updated SQLite driver name from sqlite3 to sqlite
-- Maintained full database compatibility and functionality
-- Binary size increased slightly (~9.5MB) due to embedded SQLite implementation
+### 🔧 What's New
+- Proper username resolution using system user database
+- Configurable UID thresholds (default: 1000+ for real users)
+- Minimum resource usage thresholds to filter noise
+- Explicit include/exclude user lists
+- Enhanced configuration options for fine-tuned monitoring
+
+### 📦 Configuration Changes
+New user_filtering section in config.yaml:
+- min_uid_for_real_users: 1000 (configurable UID threshold)
+- min_cpu_percent/min_memory_percent: Skip low-usage users
+- excluded_users: System users to never track
+- included_users: Specific users to always monitor
+
+### 🚀 Previous Fixes (v1.0.1)
+- **CRITICAL**: Fixed SQLite CGO dependency issues
+- **Compatibility**: Works on all Linux distributions without CGO
 
 ## ✨ Features (unchanged)
 
@@ -191,7 +204,14 @@ If you encounter any issues:
 
 ## 📝 Changelog
 
-### v${VERSION} (Critical Fix)
+### v${VERSION} (Enhanced User Monitoring)
+- 🎯 **NEW**: Smart user filtering - focus on real users causing problems
+- 👤 **IMPROVED**: Proper username display instead of uid_[id] format
+- 🔍 **ENHANCED**: Configurable filtering by UID, resource usage, and user lists
+- ⚙️ **ADDED**: Comprehensive user_filtering configuration section
+- 📊 **BETTER**: More actionable monitoring data and alerts
+
+### v1.0.1 (Critical Fix)
 - 🚨 **CRITICAL FIX**: Replaced go-sqlite3 with pure Go SQLite driver
 - 🔧 **FIXED**: \"CGO_ENABLED=0\" runtime error on all Linux distributions
 - ✅ **VERIFIED**: Now works on AlmaLinux, RHEL, CentOS, Ubuntu, Debian, and more

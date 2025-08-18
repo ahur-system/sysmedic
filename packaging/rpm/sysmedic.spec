@@ -1,5 +1,5 @@
 Name:           sysmedic
-Version:        1.0.1
+Version:        1.0.2
 Release:        1%{?dist}
 Summary:        Advanced Linux system monitoring and diagnostic tool
 License:        MIT
@@ -176,6 +176,14 @@ fi
 %dir %attr(750,sysmedic,sysmedic) /var/log/sysmedic
 
 %changelog
+* Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.2-1
+- Major improvement: Enhanced user filtering and monitoring
+- Real usernames instead of uid_[id] format
+- Smart filtering excludes system users automatically
+- Only tracks users with significant resource usage
+- Configurable user filtering options
+- Better focus on actual problematic users
+
 * Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.1-1
 - Critical fix: Replace go-sqlite3 with pure Go SQLite driver
 - Resolves CGO dependency issues that caused runtime failures
