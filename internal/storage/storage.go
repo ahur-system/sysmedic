@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/go-sqlite"
 	"github.com/ahur-system/sysmedic/internal/monitor"
 )
 
@@ -69,7 +69,7 @@ type PersistentUserRecord struct {
 func NewStorage(dataPath string) (*Storage, error) {
 	dbPath := filepath.Join(dataPath, "sysmedic.db")
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
