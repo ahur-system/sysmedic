@@ -3,54 +3,83 @@
 
 # System monitoring settings
 monitoring:
-  check_interval: 60          # How often to check system metrics (seconds)
-  cpu_threshold: 80           # System-wide CPU threshold (%)
-  memory_threshold: 80        # System-wide memory threshold (%)
-  persistent_time: 60         # Minutes before flagging persistent usage
+    check_interval: 60 # How often to check system metrics (seconds)
+    cpu_threshold: 80 # System-wide CPU threshold (%)
+    memory_threshold: 80 # System-wide memory threshold (%)
+    persistent_time: 60 # Minutes before flagging persistent usage
 
 # Default user monitoring settings
 users:
-  cpu_threshold: 80           # Default per-user CPU threshold (%)
-  memory_threshold: 80        # Default per-user memory threshold (%)
-  persistent_time: 60         # Minutes before flagging user as persistent
+    cpu_threshold: 80 # Default per-user CPU threshold (%)
+    memory_threshold: 80 # Default per-user memory threshold (%)
+    persistent_time: 60 # Minutes before flagging user as persistent
 
 # Reporting and data retention
 reporting:
-  period: "hourly"            # Default report period (hourly/daily/weekly)
-  retain_days: 30             # Days to keep historical data
+    period: "hourly" # Default report period (hourly/daily/weekly)
+    retain_days: 30 # Days to keep historical data
 
 # Email notification settings
 email:
-  enabled: false              # Enable/disable email alerts
-  smtp_host: "smtp.gmail.com" # SMTP server hostname
-  smtp_port: 587              # SMTP server port
-  username: ""                # SMTP username (usually your email)
-  password: ""                # SMTP password (use app password for Gmail)
-  from: "sysmedic@yourdomain.com"  # From address
-  to: "admin@yourdomain.com"       # Alert recipient
-  tls: true                   # Use TLS encryption
+    enabled: false # Enable/disable email alerts
+    smtp_host: "smtp.gmail.com" # SMTP server hostname
+    smtp_port: 587 # SMTP server port
+    username: "" # SMTP username (usually your email)
+    password: "" # SMTP password (use app password for Gmail)
+    from: "sysmedic@yourdomain.com" # From address
+    to: "admin@yourdomain.com" # Alert recipient
+    tls: true # Use TLS encryption
 
 # Per-user custom thresholds
 # Override default thresholds for specific users
 user_thresholds:
-  # Example: Database user with higher CPU tolerance
-  database_user:
-    cpu_threshold: 90         # Allow higher CPU usage
-    memory_threshold: 70      # But stricter memory limits
-    persistent_time: 90       # Longer time before flagging
+    # Example: Database user with higher CPU tolerance
+    database_user:
+        cpu_threshold: 90 # Allow higher CPU usage
+        memory_threshold: 70 # But stricter memory limits
+        persistent_time: 90 # Longer time before flagging
 
-  # Example: Development user with relaxed limits
-  dev_user:
-    cpu_threshold: 95
-    memory_threshold: 90
-    persistent_time: 120
+    # Example: Development user with relaxed limits
+    dev_user:
+        cpu_threshold: 95
+        memory_threshold: 90
+        persistent_time: 120
 
-  # Example: Critical service user with very strict limits
-  critical_service:
-    cpu_threshold: 60
-    memory_threshold: 60
-    persistent_time: 30       # Flag quickly if issues arise
+    # Example: Critical service user with very strict limits
+    critical_service:
+        cpu_threshold: 60
+        memory_threshold: 60
+        persistent_time: 30 # Flag quickly if issues arise
 
+# User filtering settings - Focus on real users causing problems
+user_filtering:
+    min_uid_for_real_users: 1000 # Minimum UID to consider real users (1000+)
+    ignore_system_users: true # Skip common system/service users
+    min_cpu_percent: 5.0 # Only track users using >= 5% CPU
+    min_memory_percent: 5.0 # Only track users using >= 5% memory
+    min_process_count: 1 # Minimum processes to track user
+
+    # Specific users to never track (system users, services)
+    excluded_users:
+        - "root"
+        - "daemon"
+        - "sshd"
+        - "systemd-network"
+        - "systemd-resolve"
+        - "messagebus"
+        - "syslog"
+        - "www-data"
+        - "mysql"
+        - "postgres"
+        - "redis"
+        - "nginx"
+        - "apache"
+
+    # Specific users to always track (even if below thresholds)
+    included_users:
+        - "developer"
+        - "poweruser"
+        # Add usernames you always want to monitor
 # Configuration Examples:
 #
 # Low-resource server (adjust thresholds):

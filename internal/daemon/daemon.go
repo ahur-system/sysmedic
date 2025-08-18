@@ -59,7 +59,7 @@ func NewDaemon(cfg *config.Config) (*Daemon, error) {
 	}
 
 	// Initialize monitor
-	mon := monitor.NewMonitor()
+	mon := monitor.NewMonitor(cfg)
 
 	// Initialize alert manager
 	alertMgr := alerts.NewAlertManager(cfg, storage)

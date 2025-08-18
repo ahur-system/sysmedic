@@ -16,6 +16,7 @@ type Config struct {
 	Reporting  ReportingConfig  `yaml:"reporting"`
 	Email      EmailConfig      `yaml:"email"`
 	UserThresholds map[string]UserThreshold `yaml:"user_thresholds"`
+	UserFiltering UserFilteringConfig `yaml:"user_filtering"`
 }
 
 // MonitoringConfig contains system-wide monitoring settings
@@ -31,6 +32,17 @@ type UsersConfig struct {
 	CPUThreshold    int `yaml:"cpu_threshold"`    // default per-user %
 	MemoryThreshold int `yaml:"memory_threshold"` // default per-user %
 	PersistentTime  int `yaml:"persistent_time"`  // minutes before flagging user
+}
+
+// UserFilteringConfig contains settings for filtering which users to track
+type UserFilteringConfig struct {
+	MinUIDForRealUsers  int      `yaml:"min_uid_for_real_users"`  // minimum UID to consider real user (default: 1000)
+	IgnoreSystemUsers   bool     `yaml:"ignore_system_users"`     // skip common system users (default: true)
+	MinCPUPercent      float64  `yaml:"min_cpu_percent"`         // minimum CPU % to track user (default: 5.0)
+	MinMemoryPercent   float64  `yaml:"min_memory_percent"`      // minimum memory % to track user (default: 5.0)
+	MinProcessCount    int      `yaml:"min_process_count"`       // minimum processes to track single-process users (default: 1)
+	ExcludedUsers      []string `yaml:"excluded_users"`          // specific usernames to never track
+	IncludedUsers      []string `yaml:"included_users"`          // specific usernames to always track
 }
 
 // ReportingConfig contains reporting and data retention settings
@@ -76,7 +88,16 @@ func GetDefaultConfig() *Config {
 		Users: UsersConfig{
 			CPUThreshold:    80,
 			MemoryThreshold: 80,
-			PersistentTime:  60,
+			PersistentTime:  60, // 1 hour
+		},
+		UserFiltering: UserFilteringConfig{
+			MinUIDForRealUsers: 1000,
+			IgnoreSystemUsers:  true,
+			MinCPUPercent:     5.0,
+			MinMemoryPercent:  5.0,
+			MinProcessCount:   1,
+			ExcludedUsers:     []string{"root", "daemon", "sshd", "systemd-network"},
+			IncludedUsers:     []string{}, // empty by default
 		},
 		Reporting: ReportingConfig{
 			Period:     "hourly",
@@ -211,9 +232,14 @@ func (c *Config) SetSystemThreshold(metric string, value int) error {
 	return nil
 }
 
-// GetCheckInterval returns the monitoring check interval as duration
+// GetCheckInterval returns the monitoring check interval as a duration
 func (c *Config) GetCheckInterval() time.Duration {
 	return time.Duration(c.Monitoring.CheckInterval) * time.Second
+}
+
+// GetUserFiltering returns the user filtering configuration
+func (c *Config) GetUserFiltering() UserFilteringConfig {
+	return c.UserFiltering
 }
 
 // GetSystemPersistentTime returns the system persistent time as duration

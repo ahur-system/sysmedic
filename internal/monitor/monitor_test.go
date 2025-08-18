@@ -1,13 +1,30 @@
 package monitor
 
 import (
-	"fmt"
 	"testing"
 	"time"
+
+	"github.com/ahur-system/sysmedic/internal/config"
 )
 
+// testConfig implements Config interface for testing
+type testConfig struct{}
+
+func (tc *testConfig) GetUserFiltering() config.UserFilteringConfig {
+	return config.UserFilteringConfig{
+		MinUIDForRealUsers: 1000,
+		IgnoreSystemUsers:  true,
+		MinCPUPercent:     5.0,
+		MinMemoryPercent:  5.0,
+		MinProcessCount:   1,
+		ExcludedUsers:     []string{"root", "daemon", "sshd"},
+		IncludedUsers:     []string{},
+	}
+}
+
 func TestNewMonitor(t *testing.T) {
-	monitor := NewMonitor()
+	config := &testConfig{}
+	monitor := NewMonitor(config)
 	if monitor == nil {
 		t.Fatal("NewMonitor should return a valid monitor instance")
 	}
@@ -291,9 +308,10 @@ func BenchmarkDetermineSystemStatus(b *testing.B) {
 }
 
 func BenchmarkNewMonitor(b *testing.B) {
+	config := &testConfig{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewMonitor()
+		NewMonitor(config)
 	}
 }
 

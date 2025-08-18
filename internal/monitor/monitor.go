@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ahur-system/sysmedic/internal/config"
 )
 
 // SystemMetrics represents overall system resource usage
@@ -46,6 +49,12 @@ type Monitor struct {
 	lastCPUTimes map[string]CPUTimes
 	lastNetStats NetworkStats
 	lastSampleTime time.Time
+	config Config
+}
+
+// Config interface for monitor configuration
+type Config interface {
+	GetUserFiltering() config.UserFilteringConfig
 }
 
 // CPUTimes represents CPU time statistics
@@ -76,9 +85,10 @@ type ProcessInfo struct {
 }
 
 // NewMonitor creates a new system monitor
-func NewMonitor() *Monitor {
+func NewMonitor(config Config) *Monitor {
 	return &Monitor{
 		lastCPUTimes: make(map[string]CPUTimes),
+		config:       config,
 	}
 }
 
@@ -121,17 +131,19 @@ func (m *Monitor) GetSystemMetrics() (*SystemMetrics, error) {
 	return metrics, nil
 }
 
-// GetUserMetrics collects per-user resource usage
+// GetUserMetrics collects per-user resource usage for real users only
 func (m *Monitor) GetUserMetrics() ([]UserMetrics, error) {
 	processes, err := m.getProcesses()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get processes: %w", err)
 	}
 
-	// Group processes by user
+	// Group processes by user, excluding system users
 	userProcesses := make(map[string][]ProcessInfo)
 	for _, proc := range processes {
-		userProcesses[proc.Username] = append(userProcesses[proc.Username], proc)
+		if m.isRealUser(proc.Username) {
+			userProcesses[proc.Username] = append(userProcesses[proc.Username], proc)
+		}
 	}
 
 	// Get total system resources for percentage calculations
@@ -174,12 +186,20 @@ func (m *Monitor) GetUserMetrics() ([]UserMetrics, error) {
 		})
 	}
 
+	// Filter to only include users with significant activity
+	var significantUsers []UserMetrics
+	for _, user := range userMetrics {
+		if m.shouldTrackUser(user) {
+			significantUsers = append(significantUsers, user)
+		}
+	}
+
 	// Sort by CPU usage descending
-	sort.Slice(userMetrics, func(i, j int) bool {
-		return userMetrics[i].CPUPercent > userMetrics[j].CPUPercent
+	sort.Slice(significantUsers, func(i, j int) bool {
+		return significantUsers[i].CPUPercent > significantUsers[j].CPUPercent
 	})
 
-	return userMetrics, nil
+	return significantUsers, nil
 }
 
 // getCPUUsage calculates CPU usage percentage
@@ -442,11 +462,16 @@ func (m *Monitor) getProcessInfo(pid int) (*ProcessInfo, error) {
 			fields := strings.Fields(line)
 			if len(fields) >= 2 {
 				uid := fields[1]
-				// Simple UID to username mapping (could be improved with user lookup)
+				// Proper UID to username mapping
 				if uid == "0" {
 					username = "root"
 				} else {
-					username = fmt.Sprintf("uid_%s", uid)
+					// Use proper user lookup
+					if u, err := user.LookupId(uid); err == nil {
+						username = u.Username
+					} else {
+						username = fmt.Sprintf("uid_%s", uid)
+					}
 				}
 			}
 			break
@@ -502,4 +527,66 @@ func DetermineSystemStatus(systemMetrics *SystemMetrics, userMetrics []UserMetri
 	}
 
 	return "Light Usage"
+}
+
+// isRealUser determines if a username represents a real user vs system user
+func (m *Monitor) isRealUser(username string) bool {
+	if m.config == nil {
+		return true // fallback to allowing all users if no config
+	}
+	filtering := m.config.GetUserFiltering()
+
+	// Check explicitly included users first
+	for _, included := range filtering.IncludedUsers {
+		if username == included {
+			return true
+		}
+	}
+
+	// Check explicitly excluded users
+	for _, excluded := range filtering.ExcludedUsers {
+		if username == excluded {
+			return false
+		}
+	}
+
+	// Skip users with UID format (failed lookups)
+	if strings.HasPrefix(username, "uid_") {
+		return false
+	}
+
+	// Skip users starting with underscore (common system user pattern)
+	if strings.HasPrefix(username, "_") && filtering.IgnoreSystemUsers {
+		return false
+	}
+
+	// Check UID range - configurable minimum UID for real users
+	if u, err := user.Lookup(username); err == nil {
+		if uid, err := strconv.Atoi(u.Uid); err == nil {
+			return uid >= filtering.MinUIDForRealUsers
+		}
+	}
+
+	// Default to true for unknown users (let them through)
+	return true
+}
+
+// shouldTrackUser determines if a user's activity is worth tracking
+func (m *Monitor) shouldTrackUser(userMetric UserMetrics) bool {
+	if m.config == nil {
+		return true // fallback to allowing all users if no config
+	}
+	filtering := m.config.GetUserFiltering()
+
+	// Only track users with significant resource usage
+	if userMetric.CPUPercent < filtering.MinCPUPercent && userMetric.MemoryPercent < filtering.MinMemoryPercent {
+		return false
+	}
+
+	// Only track users with enough processes or high single process usage
+	if userMetric.ProcessCount < filtering.MinProcessCount && userMetric.CPUPercent < 20.0 {
+		return false
+	}
+
+	return true
 }

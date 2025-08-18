@@ -24,7 +24,7 @@ func ShowDashboard() {
 	}
 
 	// Initialize monitor
-	mon := monitor.NewMonitor()
+	mon := monitor.NewMonitor(cfg)
 
 	// Get current system metrics
 	systemMetrics, err := mon.GetSystemMetrics()
