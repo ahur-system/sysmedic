@@ -541,6 +541,55 @@ func (s *Storage) ResolveAlert(alertID int64) error {
 	return err
 }
 
+// ResolveAllAlerts marks all unresolved alerts as resolved
+func (s *Storage) ResolveAllAlerts() (int64, error) {
+	query := `
+		UPDATE alerts
+		SET resolved = TRUE, resolved_at = CURRENT_TIMESTAMP
+		WHERE resolved = FALSE
+	`
+
+	result, err := s.db.Exec(query)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	return rowsAffected, err
+}
+
+// GetAlertByID retrieves a specific alert by ID
+func (s *Storage) GetAlertByID(alertID int64) (*Alert, error) {
+	query := `
+		SELECT id, timestamp, alert_type, severity, message, duration_minutes,
+		       primary_cause, user_details, resolved, resolved_at
+		FROM alerts
+		WHERE id = ?
+	`
+
+	var alert Alert
+	var durationMinutes int
+	err := s.db.QueryRow(query, alertID).Scan(
+		&alert.ID,
+		&alert.Timestamp,
+		&alert.AlertType,
+		&alert.Severity,
+		&alert.Message,
+		&durationMinutes,
+		&alert.PrimaryCause,
+		&alert.UserDetails,
+		&alert.Resolved,
+		&alert.ResolvedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	alert.Duration = time.Duration(durationMinutes) * time.Minute
+	return &alert, nil
+}
+
 // CleanupOldData removes data older than the specified retention period
 func (s *Storage) CleanupOldData(retentionDays int) error {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)

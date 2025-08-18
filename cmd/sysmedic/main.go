@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	version = "1.0.0"
+	version = "1.0.3"
 	commit  = "dev"
 	date    = "unknown"
 )
@@ -125,8 +125,50 @@ and user resource usage spikes with daemon capabilities and intelligent alerting
 
 	reportsCmd.AddCommand(reportsUsersCmd)
 
+	// Alerts commands
+	alertsCmd := &cobra.Command{
+		Use:   "alerts",
+		Short: "Manage system alerts",
+		Long:  "View, resolve, and manage system and user alerts",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.ShowAlerts()
+		},
+	}
+
+	alertsListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all alerts",
+		Run: func(cmd *cobra.Command, args []string) {
+			unresolved, _ := cmd.Flags().GetBool("unresolved")
+			period, _ := cmd.Flags().GetString("period")
+			cli.ListAlerts(unresolved, period)
+		},
+	}
+
+	alertsListCmd.Flags().BoolP("unresolved", "u", false, "Show only unresolved alerts")
+	alertsListCmd.Flags().StringP("period", "p", "24h", "Time period (24h, 7d, 30d)")
+
+	alertsResolveCmd := &cobra.Command{
+		Use:   "resolve [alert-id]",
+		Short: "Resolve a specific alert by ID",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.ResolveAlert(args[0])
+		},
+	}
+
+	alertsResolveAllCmd := &cobra.Command{
+		Use:   "resolve-all",
+		Short: "Resolve all unresolved alerts",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.ResolveAllAlerts()
+		},
+	}
+
+	alertsCmd.AddCommand(alertsListCmd, alertsResolveCmd, alertsResolveAllCmd)
+
 	// Add all commands to root
-	rootCmd.AddCommand(daemonCmd, configCmd, reportsCmd)
+	rootCmd.AddCommand(daemonCmd, configCmd, reportsCmd, alertsCmd)
 
 	// Execute the CLI
 	if err := rootCmd.Execute(); err != nil {

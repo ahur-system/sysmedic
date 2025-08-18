@@ -621,3 +621,252 @@ func getOSInfo() string {
 
 	return "Linux"
 }
+
+// ShowAlerts displays the alerts overview
+func ShowAlerts() {
+	// Initialize storage
+	dataPath, err := config.GetDataPath()
+	if err != nil {
+		fmt.Printf("Error getting data path: %v\n", err)
+		return
+	}
+
+	store, err := storage.NewStorage(dataPath)
+	if err != nil {
+		fmt.Printf("Error initializing storage: %v\n", err)
+		return
+	}
+	defer store.Close()
+
+	// Get recent alerts
+	alerts, err := store.GetRecentAlerts(24*time.Hour, nil)
+	if err != nil {
+		fmt.Printf("Error getting alerts: %v\n", err)
+		return
+	}
+
+	if len(alerts) == 0 {
+		fmt.Printf("No alerts found in the last 24 hours\n")
+		return
+	}
+
+	// Count unresolved alerts
+	unresolved := 0
+	resolved := 0
+	for _, alert := range alerts {
+		if alert.Resolved {
+			resolved++
+		} else {
+			unresolved++
+		}
+	}
+
+	fmt.Printf("Alert Summary (Last 24 Hours):\n\n")
+	fmt.Printf("Total Alerts: %d\n", len(alerts))
+	fmt.Printf("Unresolved: %d\n", unresolved)
+	fmt.Printf("Resolved: %d\n\n", resolved)
+
+	if unresolved > 0 {
+		fmt.Printf("Recent Unresolved Alerts:\n")
+		count := 0
+		for _, alert := range alerts {
+			if !alert.Resolved && count < 5 {
+				fmt.Printf("  [%d] %s - %s (%s, %v)\n",
+					alert.ID,
+					alert.Timestamp.Format("15:04"),
+					strings.Title(alert.Severity),
+					alert.Message,
+					alert.Duration.Round(time.Minute))
+				count++
+			}
+		}
+		if unresolved > 5 {
+			fmt.Printf("  ... and %d more\n", unresolved-5)
+		}
+		fmt.Printf("\nUse 'sysmedic alerts list -u' to see all unresolved alerts\n")
+		fmt.Printf("Use 'sysmedic alerts resolve <id>' to resolve specific alerts\n")
+		fmt.Printf("Use 'sysmedic alerts resolve-all' to resolve all alerts\n")
+	}
+}
+
+// ListAlerts displays a list of alerts
+func ListAlerts(unresolved bool, period string) {
+	// Initialize storage
+	dataPath, err := config.GetDataPath()
+	if err != nil {
+		fmt.Printf("Error getting data path: %v\n", err)
+		return
+	}
+
+	store, err := storage.NewStorage(dataPath)
+	if err != nil {
+		fmt.Printf("Error initializing storage: %v\n", err)
+		return
+	}
+	defer store.Close()
+
+	// Determine time period
+	var duration time.Duration
+	switch period {
+	case "24h":
+		duration = 24 * time.Hour
+	case "7d":
+		duration = 7 * 24 * time.Hour
+	case "30d":
+		duration = 30 * 24 * time.Hour
+	default:
+		duration = 24 * time.Hour
+	}
+
+	// Get alerts based on filter
+	var resolvedFilter *bool
+	if unresolved {
+		filter := false
+		resolvedFilter = &filter
+	}
+
+	alerts, err := store.GetRecentAlerts(duration, resolvedFilter)
+	if err != nil {
+		fmt.Printf("Error getting alerts: %v\n", err)
+		return
+	}
+
+	if len(alerts) == 0 {
+		if unresolved {
+			fmt.Printf("No unresolved alerts found in the last %s\n", period)
+		} else {
+			fmt.Printf("No alerts found in the last %s\n", period)
+		}
+		return
+	}
+
+	// Display header
+	if unresolved {
+		fmt.Printf("Unresolved Alerts (Last %s):\n\n", period)
+	} else {
+		fmt.Printf("All Alerts (Last %s):\n\n", period)
+	}
+
+	fmt.Printf("%-5s %-12s %-8s %-10s %-8s %-40s\n", "ID", "Time", "Type", "Severity", "Status", "Message")
+	fmt.Printf("%-5s %-12s %-8s %-10s %-8s %-40s\n", "---", "----", "----", "--------", "------", "-------")
+
+	// Display alerts
+	for _, alert := range alerts {
+		status := "Open"
+		if alert.Resolved {
+			status = "Resolved"
+		}
+
+		message := alert.Message
+		if len(message) > 37 {
+			message = message[:37] + "..."
+		}
+
+		fmt.Printf("%-5d %-12s %-8s %-10s %-8s %-40s\n",
+			alert.ID,
+			alert.Timestamp.Format("15:04 Jan 02"),
+			alert.AlertType,
+			strings.Title(alert.Severity),
+			status,
+			message)
+	}
+
+	fmt.Printf("\nTotal: %d alerts\n", len(alerts))
+}
+
+// ResolveAlert resolves a specific alert by ID
+func ResolveAlert(alertIDStr string) {
+	// Parse alert ID
+	alertID, err := strconv.ParseInt(alertIDStr, 10, 64)
+	if err != nil {
+		fmt.Printf("Error: Invalid alert ID '%s'. Must be a number.\n", alertIDStr)
+		return
+	}
+
+	// Initialize storage
+	dataPath, err := config.GetDataPath()
+	if err != nil {
+		fmt.Printf("Error getting data path: %v\n", err)
+		return
+	}
+
+	store, err := storage.NewStorage(dataPath)
+	if err != nil {
+		fmt.Printf("Error initializing storage: %v\n", err)
+		return
+	}
+	defer store.Close()
+
+	// Check if alert exists and is unresolved
+	alert, err := store.GetAlertByID(alertID)
+	if err != nil {
+		fmt.Printf("Error: Alert with ID %d not found\n", alertID)
+		return
+	}
+
+	if alert.Resolved {
+		fmt.Printf("Alert %d is already resolved\n", alertID)
+		return
+	}
+
+	// Resolve the alert
+	if err := store.ResolveAlert(alertID); err != nil {
+		fmt.Printf("Error resolving alert: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ Alert %d resolved successfully\n", alertID)
+	fmt.Printf("  %s - %s (%s)\n",
+		alert.Timestamp.Format("2006-01-02 15:04:05"),
+		strings.Title(alert.Severity),
+		alert.Message)
+}
+
+// ResolveAllAlerts resolves all unresolved alerts
+func ResolveAllAlerts() {
+	// Initialize storage
+	dataPath, err := config.GetDataPath()
+	if err != nil {
+		fmt.Printf("Error getting data path: %v\n", err)
+		return
+	}
+
+	store, err := storage.NewStorage(dataPath)
+	if err != nil {
+		fmt.Printf("Error initializing storage: %v\n", err)
+		return
+	}
+	defer store.Close()
+
+	// Get count of unresolved alerts first
+	alerts, err := store.GetRecentAlerts(365*24*time.Hour, func() *bool { f := false; return &f }())
+	if err != nil {
+		fmt.Printf("Error getting alerts: %v\n", err)
+		return
+	}
+
+	unresolvedCount := len(alerts)
+	if unresolvedCount == 0 {
+		fmt.Printf("No unresolved alerts found\n")
+		return
+	}
+
+	// Confirm action
+	fmt.Printf("Found %d unresolved alerts. Are you sure you want to resolve all of them? (y/N): ", unresolvedCount)
+	var response string
+	fmt.Scanln(&response)
+
+	if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
+		fmt.Printf("Operation cancelled\n")
+		return
+	}
+
+	// Resolve all alerts
+	rowsAffected, err := store.ResolveAllAlerts()
+	if err != nil {
+		fmt.Printf("Error resolving alerts: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ Successfully resolved %d alerts\n", rowsAffected)
+}

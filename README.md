@@ -12,6 +12,7 @@
 - **User-Centric Monitoring**: Identify which users are consuming system resources
 - **Persistent Usage Detection**: Flag users with sustained high resource usage (60+ minutes)
 - **Smart Alerting**: Email notifications with detailed user breakdowns and recommendations
+- **Alert Management**: View, filter, and resolve system alerts with CLI commands
 - **Daemon Mode**: Background monitoring with configurable intervals
 - **SQLite Storage**: Embedded database with configurable retention
 - **Zero Dependencies**: Single static binary with no external requirements
@@ -145,6 +146,16 @@ sysmedic reports users                # Detailed user activity
 sysmedic reports users --top 10       # Top 10 resource consumers
 sysmedic reports --period daily       # Custom time period
 sysmedic reports users --user database_user # Specific user history
+```
+
+### Alert Management
+```bash
+sysmedic alerts                       # Show alert summary and overview
+sysmedic alerts list                  # List all alerts (24h default)
+sysmedic alerts list -u               # Show only unresolved alerts
+sysmedic alerts list -p 7d            # Show alerts from last 7 days
+sysmedic alerts resolve 123           # Resolve specific alert by ID
+sysmedic alerts resolve-all           # Resolve all unresolved alerts (with confirmation)
 ```
 
 ## Email Alerts
