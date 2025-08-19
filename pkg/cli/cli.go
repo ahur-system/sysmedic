@@ -12,6 +12,7 @@ import (
 	"github.com/ahur-system/sysmedic/internal/daemon"
 	"github.com/ahur-system/sysmedic/internal/monitor"
 	"github.com/ahur-system/sysmedic/internal/storage"
+	"github.com/ahur-system/sysmedic/internal/websocket"
 )
 
 // ShowDashboard displays the main system dashboard
@@ -869,4 +870,96 @@ func ResolveAllAlerts() {
 	}
 
 	fmt.Printf("✓ Successfully resolved %d alerts\n", rowsAffected)
+}
+
+// ShowWebSocketStatus displays the current WebSocket server status
+func ShowWebSocketStatus() {
+	manager := websocket.GetManager()
+	status := manager.GetStatus()
+
+	fmt.Printf("WebSocket Status: ")
+	if running, ok := status["running"].(bool); ok && running {
+		fmt.Printf("🟢 Running\n")
+		if port, ok := status["port"].(int); ok {
+			fmt.Printf("Port: %d\n", port)
+		}
+		if clients, ok := status["clients"].(int); ok {
+			fmt.Printf("Clients: %d\n", clients)
+		}
+		if url, ok := status["connection_url"].(string); ok && url != "" {
+			fmt.Printf("Connection URL: %s\n", url)
+		}
+	} else {
+		fmt.Printf("🔴 Not Running\n")
+		if enabled, ok := status["enabled"].(bool); ok && enabled {
+			if port, ok := status["port"].(int); ok {
+				fmt.Printf("Port: %d (configured)\n", port)
+			}
+			fmt.Printf("Status: Daemon not running or WebSocket disabled\n")
+		} else {
+			fmt.Printf("Status: WebSocket not configured\n")
+		}
+	}
+
+	// Note: Daemon status check removed for simplicity
+	fmt.Printf("Daemon: Check with 'systemctl status sysmedic'\n")
+}
+
+// StartWebSocketServer configures and starts the WebSocket server
+func StartWebSocketServer(port int) {
+	if port < 1 || port > 65535 {
+		fmt.Printf("Error: Invalid port number %d. Must be between 1-65535\n", port)
+		return
+	}
+
+	manager := websocket.GetManager()
+	err := manager.Configure(port, true)
+	if err != nil {
+		fmt.Printf("Error configuring WebSocket server: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ WebSocket server configured on port %d\n", port)
+	fmt.Printf("  To start the server, restart the daemon:\n")
+	fmt.Printf("  sudo systemctl restart sysmedic\n")
+	fmt.Printf("\n")
+	fmt.Printf("  After restart, check status with:\n")
+	fmt.Printf("  sysmedic websocket status\n")
+}
+
+// StopWebSocketServer stops and disables the WebSocket server
+func StopWebSocketServer() {
+	manager := websocket.GetManager()
+	err := manager.Configure(0, false)
+	if err != nil {
+		fmt.Printf("Error disabling WebSocket server: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ WebSocket server disabled\n")
+	fmt.Printf("  To stop the server, restart the daemon:\n")
+	fmt.Printf("  sudo systemctl restart sysmedic\n")
+}
+
+// GenerateNewWebSocketSecret generates a new authentication secret
+func GenerateNewWebSocketSecret() {
+	manager := websocket.GetManager()
+	status := manager.GetStatus()
+
+	if enabled, ok := status["enabled"].(bool); !ok || !enabled {
+		fmt.Printf("Error: WebSocket server is not configured\n")
+		fmt.Printf("Enable it first with: sysmedic websocket start\n")
+		return
+	}
+
+	err := manager.GenerateNewSecret()
+	if err != nil {
+		fmt.Printf("Error generating new secret: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ New WebSocket secret generated\n")
+	fmt.Printf("  All existing clients will be disconnected\n")
+	fmt.Printf("  Get new connection URL with:\n")
+	fmt.Printf("  sysmedic websocket status\n")
 }

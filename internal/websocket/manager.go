@@ -149,13 +149,16 @@ func (m *Manager) GetStatus() map[string]interface{} {
 	defer m.mu.RUnlock()
 
 	status := map[string]interface{}{
-		"running":      false,
-		"port":         0,
-		"clients":      0,
+		"running":        false,
+		"port":           0,
+		"clients":        0,
 		"connection_url": "",
+		"enabled":        false,
 	}
 
 	config, _ := m.LoadConfig()
+	status["enabled"] = config.Enabled
+
 	if m.server != nil && m.server.IsRunning() {
 		status["running"] = true
 		status["port"] = m.server.port
@@ -213,6 +216,27 @@ func (m *Manager) generateSecret() string {
 		return fmt.Sprintf("sysmedic_%d", time.Now().Unix())
 	}
 	return hex.EncodeToString(bytes)
+}
+
+func (m *Manager) Configure(port int, enabled bool) error {
+	config, err := m.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	config.Port = port
+	config.Enabled = enabled
+
+	// Generate secret if empty and enabling
+	if enabled && config.Secret == "" {
+		config.Secret = m.generateSecret()
+	}
+
+	return m.SaveConfig(config)
+}
+
+func (m *Manager) GenerateNewSecret() error {
+	return m.RegenerateSecret()
 }
 
 func (m *Manager) RegenerateSecret() error {
