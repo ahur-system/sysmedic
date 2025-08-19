@@ -3,13 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/ahur-system/sysmedic/pkg/cli"
 )
 
 var (
-	version = "1.0.3"
+	version = "1.0.5"
 	commit  = "dev"
 	date    = "unknown"
 )
@@ -167,8 +168,62 @@ and user resource usage spikes with daemon capabilities and intelligent alerting
 
 	alertsCmd.AddCommand(alertsListCmd, alertsResolveCmd, alertsResolveAllCmd)
 
+	// WebSocket commands
+	websocketCmd := &cobra.Command{
+		Use:   "websocket",
+		Short: "Manage WebSocket remote connection server",
+		Long:  "Start, stop, or check the status of the WebSocket server for remote monitoring",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.ShowWebSocketStatus()
+		},
+	}
+
+	websocketStartCmd := &cobra.Command{
+		Use:   "start [port]",
+		Short: "Start the WebSocket server",
+		Args:  cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			port := 8060 // Default port
+			if len(args) > 0 {
+				if p, err := strconv.Atoi(args[0]); err == nil {
+					port = p
+				} else {
+					fmt.Printf("Invalid port number: %s\n", args[0])
+					return
+				}
+			}
+			cli.StartWebSocketServer(port)
+		},
+	}
+
+	websocketStopCmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the WebSocket server",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.StopWebSocketServer()
+		},
+	}
+
+	websocketStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Check WebSocket server status",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.ShowWebSocketStatus()
+		},
+	}
+
+	websocketSecretCmd := &cobra.Command{
+		Use:   "new-secret",
+		Short: "Generate a new connection secret",
+		Run: func(cmd *cobra.Command, args []string) {
+			cli.GenerateNewWebSocketSecret()
+		},
+	}
+
+	websocketCmd.AddCommand(websocketStartCmd, websocketStopCmd, websocketStatusCmd, websocketSecretCmd)
+
 	// Add all commands to root
-	rootCmd.AddCommand(daemonCmd, configCmd, reportsCmd, alertsCmd)
+	rootCmd.AddCommand(daemonCmd, configCmd, reportsCmd, alertsCmd, websocketCmd)
 
 	// Execute the CLI
 	if err := rootCmd.Execute(); err != nil {
