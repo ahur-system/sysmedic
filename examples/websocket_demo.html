@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysMedic WebSocket Client Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #444;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+
+        .connection-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .status-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status.connected .status-indicator {
+            background-color: #28a745;
+        }
+
+        .status.disconnected .status-indicator {
+            background-color: #dc3545;
+        }
+
+        .status.reconnecting .status-indicator {
+            background-color: #ffc107;
+            animation: pulse 1s infinite;
+        }
+
+        .status.error .status-indicator {
+            background-color: #dc3545;
+            animation: blink 0.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+        }
+
+        .btn-success:hover {
+            background-color: #1e7e34;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .log-container {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .config-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .alerts-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #dc3545;
+            background: #f8f9fa;
+        }
+
+        .timestamp {
+            font-size: 11px;
+            color: #666;
+            float: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>🩺 SysMedic WebSocket Client Demo</h1>
+
+    <div class="alert alert-info">
+        <strong>Instructions:</strong> Enter your WebSocket server URL and secret below, then click "Connect" to establish a connection.
+        The client will automatically handle reconnections and keep the connection alive with ping/pong messages.
+    </div>
+
+    <!-- Connection Configuration -->
+    <div class="container">
+        <h2>Connection Configuration</h2>
+        <div class="config-form">
+            <div class="form-group">
+                <label for="ws-url">WebSocket URL:</label>
+                <input type="text" id="ws-url" value="ws://45.95.186.208:8060/ws" placeholder="ws://hostname:port/ws">
+            </div>
+            <div class="form-group">
+                <label for="ws-secret">Secret:</label>
+                <input type="text" id="ws-secret" value="55625821f7a0a9db98707bae107e46a4" placeholder="Enter your secret">
+            </div>
+            <div class="form-group">
+                <label for="ping-interval">Ping Interval (ms):</label>
+                <input type="number" id="ping-interval" value="30000" min="5000" max="120000">
+            </div>
+            <div class="form-group">
+                <label for="max-reconnects">Max Reconnect Attempts:</label>
+                <input type="number" id="max-reconnects" value="10" min="1" max="50">
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Status and Controls -->
+    <div class="container">
+        <h2>Connection Status</h2>
+        <div class="connection-panel">
+            <div class="status-card">
+                <div class="status disconnected" id="connection-status">
+                    <span class="status-indicator"></span>
+                    <span>Disconnected</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    <small>Reconnect Attempts: <span id="reconnect-attempts">0</span></small><br>
+                    <small>Last Pong: <span id="last-pong">Never</span></small>
+                </div>
+            </div>
+            <div class="status-card">
+                <div><strong>Server Info:</strong></div>
+                <div>Version: <span id="server-version">Unknown</span></div>
+                <div>Uptime: <span id="server-uptime">Unknown</span></div>
+                <div>Message Count: <span id="message-count">0</span></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="connect-btn" class="btn-success">Connect</button>
+            <button id="disconnect-btn" class="btn-danger" disabled>Disconnect</button>
+            <button id="request-sysinfo-btn" disabled>Request System Info</button>
+            <button id="request-alerts-btn" disabled>Request Alerts</button>
+            <button id="request-config-btn" disabled>Request Config</button>
+            <button id="clear-log-btn">Clear Log</button>
+        </div>
+    </div>
+
+    <!-- System Metrics -->
+    <div class="container">
+        <h2>System Metrics</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <span class="metric-value" id="cpu-usage">--</span>
+                <span class="metric-label">CPU Usage</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="memory-usage">--</span>
+                <span class="metric-label">Memory Usage</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="disk-usage">--</span>
+                <span class="metric-label">Disk Usage</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="uptime">--</span>
+                <span class="metric-label">Uptime</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Alerts -->
+    <div class="container">
+        <h2>Recent Alerts</h2>
+        <div class="alerts-list" id="alerts-list">
+            <div style="text-align: center; color: #666; padding: 20px;">
+                No alerts received yet
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Log -->
+    <div class="container">
+        <h2>Connection Log</h2>
+        <div class="log-container" id="log-container">
+            Welcome to SysMedic WebSocket Client Demo
+            =========================================
+
+        </div>
+    </div>
+
+    <script src="websocket_client.js"></script>
+    <script>
+        // Global variables
+        let sysMedicClient;
+        let messageCount = 0;
+        let logContainer;
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            logContainer = document.getElementById('log-container');
+            setupEventListeners();
+            logMessage('Page loaded. Ready to connect.');
+        });
+
+        function setupEventListeners() {
+            // Connection buttons
+            document.getElementById('connect-btn').addEventListener('click', connectToServer);
+            document.getElementById('disconnect-btn').addEventListener('click', disconnectFromServer);
+
+            // Request buttons
+            document.getElementById('request-sysinfo-btn').addEventListener('click', () => {
+                if (sysMedicClient) {
+                    sysMedicClient.requestSystemInfo();
+                    logMessage('Requested system info');
+                }
+            });
+
+            document.getElementById('request-alerts-btn').addEventListener('click', () => {
+                if (sysMedicClient) {
+                    sysMedicClient.requestAlerts();
+                    logMessage('Requested alerts');
+                }
+            });
+
+            document.getElementById('request-config-btn').addEventListener('click', () => {
+                if (sysMedicClient) {
+                    sysMedicClient.requestConfig();
+                    logMessage('Requested config');
+                }
+            });
+
+            // Clear log button
+            document.getElementById('clear-log-btn').addEventListener('click', () => {
+                logContainer.textContent = 'Log cleared.\n\n';
+            });
+        }
+
+        function connectToServer() {
+            const url = document.getElementById('ws-url').value;
+            const secret = document.getElementById('ws-secret').value;
+            const pingInterval = parseInt(document.getElementById('ping-interval').value);
+            const maxReconnects = parseInt(document.getElementById('max-reconnects').value);
+
+            if (!url || !secret) {
+                alert('Please enter both URL and secret');
+                return;
+            }
+
+            logMessage(`Connecting to ${url}...`);
+
+            // Disconnect existing client if any
+            if (sysMedicClient) {
+                sysMedicClient.disconnect();
+            }
+
+            // Create new client
+            sysMedicClient = new SysMedicClient(url, secret, {
+                maxReconnectAttempts: maxReconnects,
+                reconnectInterval: 5000,
+                pingInterval: pingInterval,
+                pongTimeout: 10000,
+                onConnect: handleConnect,
+                onDisconnect: handleDisconnect,
+                onMessage: handleMessage,
+                onError: handleError,
+                onReconnecting: handleReconnecting
+            });
+        }
+
+        function disconnectFromServer() {
+            if (sysMedicClient) {
+                sysMedicClient.disconnect();
+                logMessage('Manually disconnected');
+            }
+        }
+
+        function handleConnect() {
+            logMessage('✅ Connected to SysMedic server');
+            updateConnectionStatus('Connected');
+            updateButtons(true);
+        }
+
+        function handleDisconnect(event) {
+            logMessage(`❌ Disconnected: ${event.code} ${event.reason}`);
+            updateConnectionStatus('Disconnected');
+            updateButtons(false);
+        }
+
+        function handleMessage(data) {
+            messageCount++;
+            document.getElementById('message-count').textContent = messageCount;
+
+            switch (data.type) {
+                case 'welcome':
+                    logMessage(`🎉 Welcome: ${data.data.message}`);
+                    document.getElementById('server-version').textContent = data.data.version || 'Unknown';
+                    if (data.data.system && data.data.system.uptime) {
+                        document.getElementById('server-uptime').textContent = data.data.system.uptime;
+                    }
+                    break;
+
+                case 'system_update':
+                    updateSystemMetrics(data.data);
+                    logMessage('📊 System metrics updated');
+                    break;
+
+                case 'pong':
+                    document.getElementById('last-pong').textContent = new Date().toLocaleTimeString();
+                    logMessage('🏓 Pong received');
+                    break;
+
+                case 'alert':
+                    displayAlert(data.data);
+                    logMessage(`🚨 Alert: ${data.data.message || JSON.stringify(data.data)}`);
+                    break;
+
+                default:
+                    logMessage(`📨 Message (${data.type}): ${JSON.stringify(data.data)}`);
+            }
+        }
+
+        function handleError(error) {
+            logMessage(`❌ Error: ${error.message || error}`);
+            updateConnectionStatus('Error');
+        }
+
+        function handleReconnecting(attempt, delay) {
+            logMessage(`🔄 Reconnecting... (${attempt}/10) in ${delay}ms`);
+            updateConnectionStatus(`Reconnecting (${attempt}/10)`);
+            document.getElementById('reconnect-attempts').textContent = attempt;
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connection-status');
+            const indicator = statusElement.querySelector('.status-indicator');
+            const text = statusElement.querySelector('span:last-child');
+
+            text.textContent = status;
+            statusElement.className = `status ${status.toLowerCase().replace(/[^a-z]/g, '')}`;
+        }
+
+        function updateButtons(connected) {
+            document.getElementById('connect-btn').disabled = connected;
+            document.getElementById('disconnect-btn').disabled = !connected;
+            document.getElementById('request-sysinfo-btn').disabled = !connected;
+            document.getElementById('request-alerts-btn').disabled = !connected;
+            document.getElementById('request-config-btn').disabled = !connected;
+        }
+
+        function updateSystemMetrics(metrics) {
+            if (metrics.cpu_usage !== undefined) {
+                document.getElementById('cpu-usage').textContent = `${metrics.cpu_usage.toFixed(1)}%`;
+            }
+            if (metrics.memory_usage !== undefined) {
+                document.getElementById('memory-usage').textContent = `${metrics.memory_usage.toFixed(1)}%`;
+            }
+            if (metrics.disk_usage !== undefined) {
+                document.getElementById('disk-usage').textContent = `${metrics.disk_usage.toFixed(1)}%`;
+            }
+            if (metrics.uptime) {
+                document.getElementById('uptime').textContent = metrics.uptime;
+            }
+        }
+
+        function displayAlert(alert) {
+            const alertsList = document.getElementById('alerts-list');
+
+            // Clear "no alerts" message if present
+            if (alertsList.querySelector('div[style*="text-align: center"]')) {
+                alertsList.innerHTML = '';
+            }
+
+            const alertItem = document.createElement('div');
+            alertItem.className = 'alert-item';
+            alertItem.innerHTML = `
+                <div>
+                    <strong>${alert.type || 'Alert'}</strong>
+                    <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div>${alert.message || JSON.stringify(alert)}</div>
+            `;
+
+            alertsList.insertBefore(alertItem, alertsList.firstChild);
+
+            // Keep only last 10 alerts
+            while (alertsList.children.length > 10) {
+                alertsList.removeChild(alertsList.lastChild);
+            }
+        }
+
+        function logMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logContainer.textContent += `[${timestamp}] ${message}\n`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (sysMedicClient) {
+                sysMedicClient.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>
