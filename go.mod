@@ -4,8 +4,9 @@ go 1.18
 
 require (
 	github.com/glebarez/go-sqlite v1.22.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/spf13/cobra v1.7.0
-	gopkg.in/yaml.v3 v3.0.1
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

@@ -1,6 +1,6 @@
 # SysMedic
 
-**Cross-platform Linux server monitoring CLI tool with daemon capabilities for tracking system and user resource usage spikes.**
+**Single binary multi-daemon Linux system monitoring tool with independent doctor and WebSocket daemon processes for comprehensive system and user resource tracking.**
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -8,15 +8,17 @@
 
 ## Features
 
+- **Single Binary Multi-Daemon Architecture**: One 11MB binary with independent doctor and WebSocket daemon processes
 - **Real-time System Monitoring**: Track CPU, Memory, Network usage, and Load averages
-- **User-Centric Monitoring**: Identify which users are consuming system resources
+- **User-Centric Monitoring**: Smart user filtering focusing on real problematic users
 - **Persistent Usage Detection**: Flag users with sustained high resource usage (60+ minutes)
+- **Remote Access**: WebSocket server for real-time remote monitoring
 - **Smart Alerting**: Email notifications with detailed user breakdowns and recommendations
 - **Alert Management**: View, filter, and resolve system alerts with CLI commands
-- **Daemon Mode**: Background monitoring with configurable intervals
+- **Independent Daemon Processes**: Doctor (monitoring) and WebSocket (remote access) run separately
 - **SQLite Storage**: Embedded database with configurable retention
 - **Zero Dependencies**: Single static binary with no external requirements
-- **systemd Integration**: Native Linux service integration
+- **Dual SystemD Integration**: Separate services for monitoring and WebSocket functionality
 
 ## Quick Start
 
@@ -46,16 +48,28 @@ sudo make install
 sysmedic
 ```
 
-**Start Daemon:**
+**Start Daemons:**
 ```bash
-sudo sysmedic daemon start
-sudo systemctl enable sysmedic  # Auto-start on boot
+# Start both daemon processes
+sudo sysmedic daemon start      # Doctor daemon (monitoring)
+sudo sysmedic websocket start   # WebSocket daemon (remote access)
+
+# Enable auto-start on boot
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+sudo systemctl start sysmedic.doctor sysmedic.websocket
 ```
 
 **View Reports:**
 ```bash
 sysmedic reports
 sysmedic reports users --top 10
+```
+
+**Remote Access:**
+```bash
+sysmedic websocket start             # Start WebSocket daemon
+sysmedic websocket status            # Get quick connect URL
+# Output: Quick Connect: sysmedic://[secret]@[publicip]:[port]/
 ```
 
 ## Dashboard Output
@@ -77,6 +91,9 @@ Top Resource Users (Last Hour):
 - backup_job: CPU 15.2%, Memory 60.3%, Processes: 3
 
 ⚠️ 2 unresolved alert(s) in the last 24 hours. Run 'sysmedic reports' for details.
+
+Remote Access:
+Quick Connect: sysmedic://d8852f78260f16d31eeff80ca6158848@192.168.1.100:8060/
 ```
 
 ## Configuration
@@ -126,10 +143,18 @@ sysmedic                              # Show current status + top users
 ```
 
 ### Daemon Management
+### Daemon Commands
 ```bash
-sysmedic daemon start                 # Start monitoring daemon
-sysmedic daemon stop                  # Stop daemon  
-sysmedic daemon status                # Check if running
+# Doctor daemon (monitoring)
+sysmedic daemon start                 # Start doctor daemon
+sysmedic daemon stop                  # Stop doctor daemon  
+sysmedic daemon status                # Check daemon status
+
+# WebSocket daemon (remote access)
+sysmedic websocket start              # Start WebSocket daemon
+sysmedic websocket stop               # Stop WebSocket daemon
+sysmedic websocket status             # Check status & get quick connect URL
+sysmedic websocket new-secret         # Generate new auth secret
 ```
 
 ### Configuration
@@ -313,14 +338,20 @@ docker run --rm -it --privileged --pid=host --net=host \
 **Daemon won't start:**
 ```bash
 # Check logs
-sudo journalctl -u sysmedic -f
+sudo journalctl -u sysmedic.doctor -f     # Doctor daemon
+sudo journalctl -u sysmedic.websocket -f  # WebSocket daemon
 
 # Check permissions
 sudo ls -la /var/lib/sysmedic/
 sudo ls -la /etc/sysmedic/
 
-# Manual start
-sudo /usr/local/bin/sysmedic daemon start
+# Manual start (foreground for debugging)
+sudo sysmedic --doctor-daemon
+sudo sysmedic --websocket-daemon
+
+# Or use CLI commands
+sudo sysmedic daemon start
+sudo sysmedic websocket start
 ```
 
 **Email alerts not working:**

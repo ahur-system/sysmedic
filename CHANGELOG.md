@@ -5,6 +5,33 @@ All notable changes to SysMedic will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2024-12-11
+
+### Major Architecture Change - Single Binary Multi-Daemon
+- **BREAKING**: Replaced single service with dual independent daemon processes
+- **NEW**: Single binary (11MB) with multiple operation modes:
+  - `--doctor-daemon` for system monitoring
+  - `--websocket-daemon` for remote access
+  - Default CLI mode for management and interaction
+- **ENHANCED**: Complete process separation while maintaining deployment simplicity
+- **IMPROVED**: Independent daemon lifecycle management
+- **ADDED**: Dual SystemD service integration (`sysmedic.doctor.service`, `sysmedic.websocket.service`)
+- **UPDATED**: All packaging scripts for new architecture
+- **REMOVED**: Legacy single service file (`sysmedic.service`)
+
+### Benefits
+- Better resource isolation and fault tolerance
+- Independent daemon start/stop/restart capabilities
+- Simplified deployment with single binary
+- Enhanced scalability and maintenance
+- Process-level monitoring and debugging
+
+### Migration
+- Existing installations will automatically migrate to new architecture
+- Configuration file format remains compatible
+- New service management commands available
+- Old service references updated automatically
+
 ## [Unreleased]
 
 ## [1.0.5] - 2025-01-19
@@ -112,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Commands
 - `sysmedic` - View system dashboard
-- `sysmedic daemon start/stop/status` - Daemon management
+- `sysmedic daemon start/stop/status` - Doctor daemon management (monitoring)
+- `sysmedic websocket start/stop/status` - WebSocket daemon management (remote access)
 - `sysmedic config show/set` - Configuration management
 - `sysmedic reports` - System reports and user activity
 
