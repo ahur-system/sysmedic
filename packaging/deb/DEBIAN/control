@@ -1,23 +1,24 @@
 Package: sysmedic
-Version: 1.0.2
+Version: 1.0.5
 Section: admin
 Priority: optional
 Architecture: amd64
 Depends: systemd
 Maintainer: SysMedic Team <support@sysmedic.io>
-Description: Advanced Linux system monitoring and diagnostic tool
- SysMedic is a comprehensive system monitoring tool that provides real-time
- insights into system performance, resource usage, and health metrics.
+Description: Single binary multi-daemon Linux system monitoring tool
+ SysMedic is a comprehensive system monitoring tool that uses a single binary
+ with multiple daemon modes for modular system monitoring and remote access.
  .
  Features:
+  - Single binary with independent doctor and WebSocket daemon processes
   - Real-time CPU, memory, disk, and network monitoring
-  - System health diagnostics and alerts
-  - Historical data collection and analysis
-  - Web-based dashboard interface
-  - RESTful API for integration
+  - Smart user filtering focusing on real problematic users
+  - WebSocket server for remote monitoring access
+  - Historical data collection and trend analysis
   - Configurable monitoring intervals and thresholds
-  - Systemd service integration
+  - Independent daemon process management
+  - Dual systemd service integration
  .
- SysMedic helps system administrators proactively monitor their Linux systems
- and quickly identify performance bottlenecks or potential issues.
+ The new architecture provides process separation while maintaining deployment
+ simplicity with a single 11MB binary that can operate in multiple modes.
 Homepage: https://github.com/ahur-system/sysmedic

@@ -7,9 +7,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.2"
+VERSION="1.0.5"
 TAG="v${VERSION}"
-RELEASE_TITLE="SysMedic v${VERSION}"
+RELEASE_TITLE="SysMedic v${VERSION} - Single Binary Multi-Daemon Architecture"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,36 +36,38 @@ print_error() {
 }
 
 # Release notes
-RELEASE_NOTES="# SysMedic v${VERSION} - Enhanced User Monitoring
+RELEASE_NOTES="# SysMedic v${VERSION} - Single Binary Multi-Daemon Architecture
 
-## 🎯 MAJOR IMPROVEMENT: Smart User Filtering
+## 🎯 MAJOR ARCHITECTURAL IMPROVEMENT: Single Binary Multi-Daemon
 
-This release transforms SysMedic from tracking all users (including system users) to intelligently focusing on real users causing actual problems.
+This release introduces a revolutionary architecture change - SysMedic now uses a single binary that can operate as multiple independent daemon processes, providing the best of both worlds: simplicity and modularity.
 
 ### ✨ Key Improvements
-- **Real Usernames**: Displays actual usernames instead of cryptic \"uid_[id]\" format
-- **Smart Filtering**: Automatically excludes system users (root, daemon, sshd, etc.)
-- **Problem Focus**: Only tracks users with significant resource usage (>5% CPU/memory)
-- **Configurable**: Full control over which users to monitor or ignore
-- **Actionable Data**: Reports now highlight actual problematic users, not system processes
+- **Single Binary**: One 11MB binary handles all functionality (CLI + all daemon modes)
+- **Independent Daemons**: Doctor (monitoring) and WebSocket (remote access) run as separate processes
+- **Complete Separation**: WebSocket daemon runs independently of monitoring daemon
+- **Easy Management**: Single binary controls both daemon processes
+- **Better Resource Isolation**: Each daemon process has its own lifecycle and PID
 
 ### 🔧 What's New
-- Proper username resolution using system user database
-- Configurable UID thresholds (default: 1000+ for real users)
-- Minimum resource usage thresholds to filter noise
-- Explicit include/exclude user lists
-- Enhanced configuration options for fine-tuned monitoring
+- **Doctor Daemon Mode**: \`sysmedic --doctor-daemon\` for system monitoring
+- **WebSocket Daemon Mode**: \`sysmedic --websocket-daemon\` for remote access
+- **Process Independence**: Start/stop/restart daemons independently
+- **Simplified Deployment**: One binary, multiple operating modes
+- **Enhanced SystemD Integration**: Separate services using same binary
 
-### 📦 Configuration Changes
-New user_filtering section in config.yaml:
-- min_uid_for_real_users: 1000 (configurable UID threshold)
-- min_cpu_percent/min_memory_percent: Skip low-usage users
-- excluded_users: System users to never track
-- included_users: Specific users to always monitor
+### 📦 Architecture Changes
+- Single binary with multiple execution modes
+- Independent PID files for each daemon process
+- Separate SystemD service files for each daemon
+- Clean process separation with no inter-daemon dependencies
+- Background process spawning and management
 
-### 🚀 Previous Fixes (v1.0.1)
-- **CRITICAL**: Fixed SQLite CGO dependency issues
-- **Compatibility**: Works on all Linux distributions without CGO
+### 🚀 Previous Features (Enhanced User Monitoring)
+- **Smart User Filtering**: Focus on real users causing actual problems
+- **Real Usernames**: Proper username display instead of uid_[id] format
+- **Configurable Filtering**: Control which users to monitor or ignore
+- **Problem Focus**: Only track users with significant resource usage
 
 ## ✨ Features (unchanged)
 
@@ -84,16 +86,20 @@ New user_filtering section in config.yaml:
 \`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb
 sudo dpkg -i sysmedic-amd64.deb
-sudo systemctl enable sysmedic
-sudo systemctl start sysmedic
+sudo systemctl enable sysmedic.doctor
+sudo systemctl enable sysmedic.websocket
+sudo systemctl start sysmedic.doctor
+sudo systemctl start sysmedic.websocket
 \`\`\`
 
 ### RHEL/CentOS/Fedora (.rpm)
 \`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
 sudo rpm -i sysmedic-x86_64.rpm
-sudo systemctl enable sysmedic
-sudo systemctl start sysmedic
+sudo systemctl enable sysmedic.doctor
+sudo systemctl enable sysmedic.websocket
+sudo systemctl start sysmedic.doctor
+sudo systemctl start sysmedic.websocket
 \`\`\`
 
 ### Generic Linux (tarball)
@@ -106,22 +112,39 @@ sudo ./scripts/install.sh
 
 ## 🚀 Quick Start
 
-After installation, SysMedic will be available at:
-- **Web Dashboard**: http://localhost:8080
-- **API Endpoint**: http://localhost:8080/api/v1
-- **Health Check**: http://localhost:8080/health
+After installation, manage SysMedic daemons:
+
+### Daemon Management
+\`\`\`bash
+# Start monitoring daemon
+sysmedic daemon start
+
+# Start WebSocket daemon for remote access
+sysmedic websocket start
+
+# Check status of both daemons
+sysmedic daemon status
+
+# WebSocket server available at:
+# ws://localhost:8060/ws
+\`\`\`
 
 ### Configuration
 
 Edit the configuration file:
 \`\`\`bash
 sudo nano /etc/sysmedic/config.yaml
-sudo systemctl restart sysmedic
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
 \`\`\`
 
 ### View Logs
 \`\`\`bash
-sudo journalctl -u sysmedic -f
+# Monitor doctor daemon logs
+sudo journalctl -u sysmedic.doctor -f
+
+# Monitor WebSocket daemon logs
+sudo journalctl -u sysmedic.websocket -f
 \`\`\`
 
 ## 📋 System Requirements
@@ -130,7 +153,7 @@ sudo journalctl -u sysmedic -f
 - **Architecture**: x86_64 (AMD64)
 - **Memory**: 64MB RAM minimum
 - **Disk**: 100MB free space
-- **Network**: Port 8080 (configurable)
+- **Network**: Port 8060 for WebSocket (configurable)
 
 ## 🔒 Security
 
@@ -155,9 +178,10 @@ sudo journalctl -u sysmedic -f
 - \`SHA256SUMS\` - Checksums for verification
 
 ### Binary Features
-- Single statically-linked binary (no dependencies)
+- Single binary with multiple daemon modes (11MB)
 - Built with Go for optimal performance
-- Comprehensive system monitoring capabilities
+- Independent daemon processes for monitoring and WebSocket
+- Complete process separation and isolation
 - Production-ready with extensive testing
 
 ## 🔄 Upgrading
@@ -168,29 +192,31 @@ To upgrade from a previous version:
 \`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb
 sudo dpkg -i sysmedic-amd64.deb
-sudo systemctl restart sysmedic
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
 \`\`\`
 
 ### RHEL/CentOS
 \`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
 sudo rpm -U sysmedic-x86_64.rpm
-sudo systemctl restart sysmedic
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
 \`\`\`
 
 ## 🗑️ Uninstallation
 
 ### Debian/Ubuntu
 \`\`\`bash
-sudo systemctl stop sysmedic
-sudo systemctl disable sysmedic
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
 sudo dpkg -r sysmedic
 \`\`\`
 
 ### RHEL/CentOS
 \`\`\`bash
-sudo systemctl stop sysmedic
-sudo systemctl disable sysmedic
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
 sudo rpm -e sysmedic
 \`\`\`
 
@@ -199,17 +225,19 @@ sudo rpm -e sysmedic
 If you encounter any issues:
 
 1. Check the [troubleshooting guide](https://github.com/ahur-system/sysmedic/blob/main/docs/troubleshooting.md)
-2. View logs: \`sudo journalctl -u sysmedic -f\`
-3. [Open an issue](https://github.com/ahur-system/sysmedic/issues/new)
+2. View logs: \`sudo journalctl -u sysmedic.doctor -f\` or \`sudo journalctl -u sysmedic.websocket -f\`
+3. Check daemon status: \`sysmedic daemon status\`
+4. [Open an issue](https://github.com/ahur-system/sysmedic/issues/new)
 
 ## 📝 Changelog
 
-### v${VERSION} (Enhanced User Monitoring)
-- 🎯 **NEW**: Smart user filtering - focus on real users causing problems
-- 👤 **IMPROVED**: Proper username display instead of uid_[id] format
-- 🔍 **ENHANCED**: Configurable filtering by UID, resource usage, and user lists
-- ⚙️ **ADDED**: Comprehensive user_filtering configuration section
-- 📊 **BETTER**: More actionable monitoring data and alerts
+### v${VERSION} (Single Binary Multi-Daemon Architecture)
+- 🏗️ **MAJOR**: Single binary with multiple daemon modes
+- 🔄 **NEW**: Independent doctor and WebSocket daemon processes
+- 📦 **SIMPLIFIED**: One binary (11MB) handles all functionality
+- 🎯 **ENHANCED**: Complete process separation and isolation
+- ⚙️ **IMPROVED**: Better resource management and fault tolerance
+- 🚀 **ADDED**: Independent daemon lifecycle management
 
 ### v1.0.1 (Critical Fix)
 - 🚨 **CRITICAL FIX**: Replaced go-sqlite3 with pure Go SQLite driver
@@ -246,12 +274,12 @@ check_assets() {
 
     local missing_files=()
 
-    if [ ! -f "dist/sysmedic-amd64.deb" ]; then
-        missing_files+=("sysmedic-amd64.deb")
+    if [ ! -f "dist/sysmedic_${VERSION}_amd64.deb" ]; then
+        missing_files+=("sysmedic_${VERSION}_amd64.deb")
     fi
 
-    if [ ! -f "dist/sysmedic-x86_64.rpm" ]; then
-        missing_files+=("sysmedic-x86_64.rpm")
+    if [ ! -f "dist/sysmedic-${VERSION}-1.x86_64.rpm" ]; then
+        missing_files+=("sysmedic-${VERSION}-1.x86_64.rpm")
     fi
 
     if [ ! -f "dist/sysmedic-v${VERSION}-linux-amd64.tar.gz" ]; then
@@ -285,10 +313,14 @@ create_release() {
         git push origin --delete "$TAG" 2>/dev/null || true
     fi
 
-    # Create new tag
-    print_status "Creating tag $TAG..."
-    git tag -a "$TAG" -m "Release $TAG"
-    git push origin "$TAG"
+    # Create new tag if it doesn't exist
+    if git rev-parse "$TAG" >/dev/null 2>&1; then
+        print_warning "Tag $TAG already exists, skipping tag creation"
+    else
+        print_status "Creating tag $TAG..."
+        git tag -a "$TAG" -m "Release $TAG"
+        git push origin "$TAG"
+    fi
 
     # Create release with notes
     print_status "Creating release with assets..."
@@ -297,18 +329,30 @@ create_release() {
     NOTES_FILE=$(mktemp)
     echo "$RELEASE_NOTES" > "$NOTES_FILE"
 
+    # Create generic named copies for user-friendly download URLs
+    print_status "Creating generic named copies..."
+    if [ -f "dist/sysmedic_${VERSION}_amd64.deb" ]; then
+        cp "dist/sysmedic_${VERSION}_amd64.deb" "dist/sysmedic-amd64.deb"
+    fi
+    if [ -f "dist/sysmedic-${VERSION}-1.x86_64.rpm" ]; then
+        cp "dist/sysmedic-${VERSION}-1.x86_64.rpm" "dist/sysmedic-x86_64.rpm"
+    fi
+
     # Create release
     gh release create "$TAG" \
         --title "$RELEASE_TITLE" \
         --notes-file "$NOTES_FILE" \
         --latest \
-        dist/sysmedic-amd64.deb \
-        dist/sysmedic-x86_64.rpm \
+        "dist/sysmedic_${VERSION}_amd64.deb" \
+        "dist/sysmedic-${VERSION}-1.x86_64.rpm" \
         "dist/sysmedic-v${VERSION}-linux-amd64.tar.gz" \
-        dist/SHA256SUMS
+        dist/SHA256SUMS \
+        "dist/sysmedic-amd64.deb" \
+        "dist/sysmedic-x86_64.rpm"
 
     # Clean up
     rm -f "$NOTES_FILE"
+    rm -f "dist/sysmedic-amd64.deb" "dist/sysmedic-x86_64.rpm"
 
     print_success "Release $TAG created successfully!"
 }
@@ -352,8 +396,14 @@ main() {
     echo "  • Debian/Ubuntu: https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb"
     echo "  • RHEL/CentOS:   https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm"
     echo "  • Generic:       https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-v${VERSION}-linux-amd64.tar.gz"
+    echo "  • View config: $BINARY_NAME config show"
     echo ""
     echo "🔍 View release: https://github.com/ahur-system/sysmedic/releases/tag/$TAG"
+    echo ""
+    echo "💡 Single Binary Multi-Daemon Architecture:"
+    echo "  • One binary (11MB) with multiple daemon modes"
+    echo "  • Independent doctor (monitoring) and WebSocket processes"
+    echo "  • Complete process separation with single deployment"
     echo ""
     echo "✅ The installation commands in your documentation will now work correctly!"
 }

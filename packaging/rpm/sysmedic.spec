@@ -1,7 +1,7 @@
 Name:           sysmedic
-Version:        1.0.2
+Version:        1.0.5
 Release:        1%{?dist}
-Summary:        Advanced Linux system monitoring and diagnostic tool
+Summary:        Single binary multi-daemon Linux system monitoring tool
 License:        MIT
 URL:            https://github.com/ahur-system/sysmedic
 Source0:        %{name}-%{version}.tar.gz
@@ -13,20 +13,21 @@ Requires(preun): systemd
 Requires(postun): systemd
 
 %description
-SysMedic is a comprehensive system monitoring tool that provides real-time
-insights into system performance, resource usage, and health metrics.
+SysMedic is a comprehensive system monitoring tool that uses a single binary
+with multiple daemon modes for modular system monitoring and remote access.
 
 Features:
+- Single binary with independent doctor and WebSocket daemon processes
 - Real-time CPU, memory, disk, and network monitoring
-- System health diagnostics and alerts
-- Historical data collection and analysis
-- Web-based dashboard interface
-- RESTful API for integration
+- Smart user filtering focusing on real problematic users
+- WebSocket server for remote monitoring access
+- Historical data collection and trend analysis
 - Configurable monitoring intervals and thresholds
-- Systemd service integration
+- Independent daemon process management
+- Dual systemd service integration
 
-SysMedic helps system administrators proactively monitor their Linux systems
-and quickly identify performance bottlenecks or potential issues.
+The new architecture provides process separation while maintaining deployment
+simplicity with a single 11MB binary that can operate in multiple modes.
 
 %prep
 %setup -q
@@ -42,41 +43,115 @@ mkdir -p $RPM_BUILD_ROOT/usr/local/bin
 mkdir -p $RPM_BUILD_ROOT/etc/systemd/system
 mkdir -p $RPM_BUILD_ROOT/etc/sysmedic
 mkdir -p $RPM_BUILD_ROOT/var/lib/sysmedic
-mkdir -p $RPM_BUILD_ROOT/var/log/sysmedic
+
 
 # Install binary
 cp sysmedic $RPM_BUILD_ROOT/usr/local/bin/
 
-# Install systemd service
-cat > $RPM_BUILD_ROOT/etc/systemd/system/sysmedic.service << 'EOF'
+# Install systemd services
+cat > $RPM_BUILD_ROOT/etc/systemd/system/sysmedic.doctor.service << 'EOF'
 [Unit]
-Description=SysMedic System Monitor
+Description=SysMedic Doctor - System Monitoring Daemon
 Documentation=https://github.com/ahur-system/sysmedic
 After=network.target
-Wants=network-online.target
+Wants=network.target
 
 [Service]
 Type=simple
-User=sysmedic
-Group=sysmedic
-ExecStart=/usr/local/bin/sysmedic --config=/etc/sysmedic/config.yaml
+User=root
+Group=root
+ExecStart=/usr/local/bin/sysmedic --doctor-daemon
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
+PIDFile=/var/lib/sysmedic/sysmedic.doctor.pid
+Restart=on-failure
 RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=sysmedic
-KillMode=mixed
-KillSignal=SIGTERM
-TimeoutStopSec=30
+StartLimitInterval=60
+StartLimitBurst=3
 
 # Security settings
-NoNewPrivileges=yes
-PrivateTmp=yes
+NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/var/lib/sysmedic /var/log/sysmedic
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ProtectHome=true
+ReadWritePaths=/var/lib/sysmedic /etc/sysmedic /var/run
+PrivateTmp=true
+PrivateDevices=false
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictNamespaces=true
+
+# Allow access to system monitoring files
+ReadOnlyPaths=/proc /sys
+
+# Environment
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=SYSMEDIC_CONFIG=/etc/sysmedic/config.yaml
+Environment=SYSMEDIC_DATA=/var/lib/sysmedic
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sysmedic.doctor
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > $RPM_BUILD_ROOT/etc/systemd/system/sysmedic.websocket.service << 'EOF'
+[Unit]
+Description=SysMedic WebSocket - Remote Monitoring Server
+Documentation=https://github.com/ahur-system/sysmedic
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/sysmedic --websocket-daemon
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=/var/lib/sysmedic/sysmedic.websocket.pid
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sysmedic /etc/sysmedic /var/run
+PrivateTmp=true
+PrivateDevices=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictNamespaces=true
+
+# Allow access to system monitoring files for data collection
+ReadOnlyPaths=/proc /sys
+
+# Environment
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=SYSMEDIC_CONFIG=/etc/sysmedic/config.yaml
+Environment=SYSMEDIC_DATA=/var/lib/sysmedic
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sysmedic.websocket
 
 [Install]
 WantedBy=multi-user.target
@@ -84,84 +159,88 @@ EOF
 
 # Install default configuration
 cat > $RPM_BUILD_ROOT/etc/sysmedic/config.yaml << 'EOF'
-# SysMedic Configuration
-server:
-  host: "127.0.0.1"
-  port: 8080
-  tls:
-    enabled: false
-
 monitoring:
-  interval: 5s
-  metrics:
-    cpu: true
-    memory: true
-    disk: true
-    network: true
-    processes: true
+  check_interval: 60
+  cpu_threshold: 80
+  memory_threshold: 80
+  persistent_time: 60
 
-storage:
-  type: "file"
-  path: "/var/lib/sysmedic/data"
-  retention: "30d"
+users:
+  cpu_threshold: 80
+  memory_threshold: 80
+  persistent_time: 60
 
-logging:
-  level: "info"
-  file: "/var/log/sysmedic/sysmedic.log"
-  max_size: "100MB"
-  max_files: 5
+reporting:
+  period: "hourly"
+  retain_days: 30
 
-alerts:
+email:
+  enabled: false
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  tls: true
+
+websocket:
   enabled: true
-  thresholds:
-    cpu_usage: 80
-    memory_usage: 85
-    disk_usage: 90
+  port: 8060
+  secret: ""
+
+user_filtering:
+  min_uid_for_real_users: 1000
+  ignore_system_users: true
+  min_cpu_percent: 5.0
+  min_memory_percent: 5.0
+  min_process_count: 1
+  excluded_users: ["root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data", "backup", "list", "irc", "gnats", "nobody", "systemd+", "syslog", "_apt"]
+  included_users: []
+
+data_path: "/var/lib/sysmedic"
+
+user_thresholds: {}
 EOF
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %pre
-# Create sysmedic user and group if they don't exist
-getent group sysmedic >/dev/null || groupadd -r sysmedic
-getent passwd sysmedic >/dev/null || \
-    useradd -r -g sysmedic -d /var/lib/sysmedic -s /sbin/nologin \
-    -c "SysMedic System Monitor" sysmedic
 
 %post
-# Set proper ownership and permissions
-chown -R sysmedic:sysmedic /var/lib/sysmedic
-chown -R sysmedic:sysmedic /var/log/sysmedic
-chown sysmedic:sysmedic /etc/sysmedic/config.yaml
+# Set proper permissions
 chmod 755 /etc/sysmedic
-chmod 750 /var/lib/sysmedic
-chmod 750 /var/log/sysmedic
-chmod 640 /etc/sysmedic/config.yaml
+chmod 755 /var/lib/sysmedic
+chmod 644 /etc/sysmedic/config.yaml
 
-# Reload systemd and enable service
-%systemd_post sysmedic.service
+# Reload systemd and enable services
+%systemd_post sysmedic.doctor.service
+%systemd_post sysmedic.websocket.service
 
 echo "SysMedic has been installed successfully!"
 echo "Configuration file: /etc/sysmedic/config.yaml"
-echo "Start the service with: sudo systemctl start sysmedic"
-echo "View logs with: sudo journalctl -u sysmedic -f"
+echo "Enable services with:"
+echo "  sudo systemctl enable sysmedic.doctor"
+echo "  sudo systemctl enable sysmedic.websocket"
+echo "Start services with:"
+echo "  sudo systemctl start sysmedic.doctor"
+echo "  sudo systemctl start sysmedic.websocket"
+echo "Or use the CLI:"
+echo "  sysmedic daemon start"
+echo "  sysmedic websocket start"
+echo "View logs with:"
+echo "  sudo journalctl -u sysmedic.doctor -f"
+echo "  sudo journalctl -u sysmedic.websocket -f"
 
 %preun
-%systemd_preun sysmedic.service
+%systemd_preun sysmedic.doctor.service
+%systemd_preun sysmedic.websocket.service
 
 %postun
-%systemd_postun_with_restart sysmedic.service
+%systemd_postun_with_restart sysmedic.doctor.service
+%systemd_postun_with_restart sysmedic.websocket.service
 
 if [ $1 -eq 0 ]; then
     # Complete removal
     rm -rf /etc/sysmedic
     rm -rf /var/lib/sysmedic
-    rm -rf /var/log/sysmedic
-
-    # Remove user and group
-    userdel sysmedic 2>/dev/null || true
-    groupdel sysmedic 2>/dev/null || true
 
     echo "SysMedic has been completely removed from the system."
 fi
@@ -169,13 +248,21 @@ fi
 %files
 %defattr(-,root,root,-)
 %attr(755,root,root) /usr/local/bin/sysmedic
-%attr(644,root,root) /etc/systemd/system/sysmedic.service
-%config(noreplace) %attr(640,sysmedic,sysmedic) /etc/sysmedic/config.yaml
+%attr(644,root,root) /etc/systemd/system/sysmedic.doctor.service
+%attr(644,root,root) /etc/systemd/system/sysmedic.websocket.service
+%config(noreplace) %attr(644,root,root) /etc/sysmedic/config.yaml
 %dir %attr(755,root,root) /etc/sysmedic
-%dir %attr(750,sysmedic,sysmedic) /var/lib/sysmedic
-%dir %attr(750,sysmedic,sysmedic) /var/log/sysmedic
+%dir %attr(755,root,root) /var/lib/sysmedic
 
 %changelog
+* Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.5-1
+- Major architectural change: Single binary multi-daemon design
+- Single 11MB binary with independent doctor and WebSocket daemon processes
+- Complete process separation while maintaining deployment simplicity
+- Independent daemon lifecycle management
+- Enhanced systemd integration with dual services
+- Better resource isolation and fault tolerance
+
 * Wed Dec 11 2024 SysMedic Team <support@sysmedic.io> - 1.0.2-1
 - Major improvement: Enhanced user filtering and monitoring
 - Real usernames instead of uid_[id] format

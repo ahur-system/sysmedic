@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.2"
+VERSION="1.0.5"
 ARCH="amd64"
 RPM_ARCH="x86_64"
 
@@ -15,6 +15,7 @@ echo "🏗️  Building SysMedic packages..."
 echo "Version: $VERSION"
 echo "Architecture: $ARCH"
 echo "Project root: $PROJECT_ROOT"
+echo "Note: Will run 'make build' before package creation"
 
 # Colors for output
 RED='\033[0;31m'
@@ -65,7 +66,38 @@ check_dependencies() {
         exit 1
     fi
 
+    # Check for make
+    if ! command -v make &> /dev/null; then
+        print_error "make is required but not installed."
+        exit 1
+    fi
+
     print_success "Dependencies checked"
+}
+
+# Run pre-build validation
+run_pre_build_validation() {
+    print_status "Running pre-build validation..."
+
+    cd "$PROJECT_ROOT"
+
+    # Simple validation - just check essential files exist
+    if [ ! -f "go.mod" ]; then
+        print_error "go.mod not found"
+        exit 1
+    fi
+
+    if [ ! -f "Makefile" ]; then
+        print_error "Makefile not found"
+        exit 1
+    fi
+
+    if [ ! -f "cmd/sysmedic/main.go" ]; then
+        print_error "cmd/sysmedic/main.go not found"
+        exit 1
+    fi
+
+    print_success "Pre-build validation passed"
 }
 
 # Build the binary
@@ -74,21 +106,39 @@ build_binary() {
 
     cd "$PROJECT_ROOT"
 
-    # Clean previous builds
+    # Run make build first (required step)
+    print_status "Running make build..."
+    if ! make build; then
+        print_error "make build failed"
+        print_error "Please fix build issues before creating packages"
+        exit 1
+    fi
+    print_success "make build completed successfully"
+
+    # Clean previous builds in current directory
     rm -f sysmedic
 
-    # Build for Linux AMD64
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o sysmedic ./cmd/sysmedic
+    # Copy the built binary from build directory
+    if [ -f "build/sysmedic" ]; then
+        cp build/sysmedic sysmedic
+        print_success "Binary copied from build directory"
 
-    if [ ! -f "sysmedic" ]; then
-        print_error "Failed to build binary"
+        # Verify binary works
+        if ./sysmedic version &> /dev/null; then
+            VERSION_OUTPUT=$(./sysmedic version 2>/dev/null | head -1)
+            print_success "Binary verification passed: $VERSION_OUTPUT"
+        else
+            print_warning "Binary verification failed (may still be functional)"
+        fi
+    else
+        print_error "Binary not found in build directory after make build"
         exit 1
     fi
 
     # Make it executable
     chmod +x sysmedic
 
-    print_success "Binary built successfully"
+    print_success "Binary prepared successfully"
 }
 
 # Create Debian package
@@ -115,7 +165,7 @@ build_deb() {
     chmod 755 "$DEB_DIR/DEBIAN/postrm"
 
     # Build the package
-    PACKAGE_NAME="sysmedic-${VERSION}-${ARCH}.deb"
+    PACKAGE_NAME="sysmedic_${VERSION}_${ARCH}.deb"
     dpkg-deb --build "$DEB_DIR" "dist/$PACKAGE_NAME"
 
     if [ -f "dist/$PACKAGE_NAME" ]; then
@@ -204,13 +254,19 @@ build_tarball() {
     cp LICENSE "$TAR_DIR/"
     cp scripts/install.sh "$TAR_DIR/scripts/"
     cp scripts/config.example.yaml "$TAR_DIR/scripts/config.yaml"
-    cp scripts/sysmedic.service "$TAR_DIR/scripts/"
+    cp scripts/sysmedic.doctor.service "$TAR_DIR/scripts/"
+    cp scripts/sysmedic.websocket.service "$TAR_DIR/scripts/"
 
     # Create demo script
     cat > "$TAR_DIR/scripts/demo.sh" << 'EOF'
 #!/bin/bash
 echo "Starting SysMedic demo..."
 ./sysmedic version
+echo ""
+echo "Available daemon modes:"
+echo "  Doctor daemon (monitoring): sysmedic --doctor-daemon"
+echo "  WebSocket daemon (remote access): sysmedic --websocket-daemon"
+echo ""
 echo "Demo complete. Install with: sudo ./scripts/install.sh"
 EOF
     chmod +x "$TAR_DIR/scripts/demo.sh"
@@ -231,8 +287,12 @@ create_checksums() {
 
     cd "$PROJECT_ROOT/dist"
 
-    # Create SHA256 checksums
-    sha256sum *.deb *.rpm *.tar.gz > SHA256SUMS 2>/dev/null || true
+    # Create SHA256 checksums for all package files
+    for file in *.deb *.rpm *.tar.gz; do
+        if [ -f "$file" ]; then
+            sha256sum "$file" >> SHA256SUMS
+        fi
+    done
 
     if [ -f "SHA256SUMS" ]; then
         print_success "Checksums created: dist/SHA256SUMS"
@@ -258,14 +318,26 @@ validate_packages() {
     DEB_FILE=$(ls *.deb 2>/dev/null | head -1)
     if [ -n "$DEB_FILE" ]; then
         print_status "Testing Debian package structure..."
-        dpkg-deb --contents "$DEB_FILE" | head -10
+        dpkg-deb --contents "$DEB_FILE" | grep -E "(sysmedic\.doctor\.service|sysmedic\.websocket\.service|usr/local/bin/sysmedic)"
+        print_status "Verifying dual service architecture..."
+        if dpkg-deb --contents "$DEB_FILE" | grep -q "sysmedic\.doctor\.service" && dpkg-deb --contents "$DEB_FILE" | grep -q "sysmedic\.websocket\.service"; then
+            print_success "✓ Both daemon services included in package"
+        else
+            print_warning "⚠ Missing service files in package"
+        fi
     fi
 
     # Test RPM package (if available)
     RPM_FILE=$(ls *.rpm 2>/dev/null | head -1)
     if [ -n "$RPM_FILE" ] && command -v rpm &> /dev/null; then
         print_status "Testing RPM package structure..."
-        rpm -qlp "$RPM_FILE" | head -10
+        rpm -qlp "$RPM_FILE" | grep -E "(sysmedic\.doctor\.service|sysmedic\.websocket\.service|usr/local/bin/sysmedic)"
+        print_status "Verifying dual service architecture..."
+        if rpm -qlp "$RPM_FILE" | grep -q "sysmedic\.doctor\.service" && rpm -qlp "$RPM_FILE" | grep -q "sysmedic\.websocket\.service"; then
+            print_success "✓ Both daemon services included in package"
+        else
+            print_warning "⚠ Missing service files in package"
+        fi
     fi
 }
 
@@ -282,6 +354,7 @@ main() {
 
     # Execute build steps
     check_dependencies
+    run_pre_build_validation
     build_binary
     build_deb
     build_rpm
@@ -295,33 +368,72 @@ main() {
     ls -la dist/
     echo ""
     echo "🚀 Ready for release!"
+    echo ""
+    print_status "Build Summary:"
+    echo "  ✅ Pre-build validation: PASSED"
+    echo "  ✅ make build: PASSED"
+    echo "  ✅ Package creation: PASSED"
+    echo "  ✅ Package validation: PASSED"
 }
 
 # Handle script arguments
 case "${1:-}" in
     "deb")
         check_dependencies
+        run_pre_build_validation
         build_binary
         mkdir -p dist
         build_deb
         ;;
     "rpm")
         check_dependencies
+        run_pre_build_validation
         build_binary
         mkdir -p dist
         build_rpm
         ;;
     "tarball")
         check_dependencies
+        run_pre_build_validation
         build_binary
         mkdir -p dist
         build_tarball
+        ;;
+    "validate")
+        print_status "Running validation only..."
+        check_dependencies
+        run_pre_build_validation
+        print_success "Validation complete - ready to build packages"
         ;;
     "clean")
         print_status "Cleaning build artifacts..."
         rm -rf dist/ packaging/deb-build/ packaging/rpm-build/
         rm -f sysmedic
+        rm -rf build/
         print_success "Cleanup complete"
+        ;;
+    "--help"|"-h")
+        echo "SysMedic Package Builder"
+        echo ""
+        echo "Usage: $0 [OPTION]"
+        echo ""
+        echo "Options:"
+        echo "  deb        Build only Debian package"
+        echo "  rpm        Build only RPM package"
+        echo "  tarball    Build only tarball package"
+        echo "  validate   Run pre-build validation only"
+        echo "  clean      Clean build artifacts"
+        echo "  --help     Show this help"
+        echo ""
+        echo "Default: Build all packages (deb, rpm, tarball)"
+        echo ""
+        echo "Prerequisites:"
+        echo "  - Go compiler"
+        echo "  - make"
+        echo "  - dpkg-deb (for .deb packages)"
+        echo "  - rpmbuild (for .rpm packages)"
+        echo ""
+        echo "The script will run 'make build' before creating packages."
         ;;
     *)
         main

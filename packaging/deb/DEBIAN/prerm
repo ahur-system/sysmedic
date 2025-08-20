@@ -6,16 +6,26 @@ set -e
 
 case "$1" in
     remove|upgrade|deconfigure)
-        # Stop the service if it's running
-        if systemctl is-active --quiet sysmedic.service; then
-            echo "Stopping sysmedic service..."
-            systemctl stop sysmedic.service
+        # Stop the services if they're running
+        if systemctl is-active --quiet sysmedic.doctor.service; then
+            echo "Stopping sysmedic doctor service..."
+            systemctl stop sysmedic.doctor.service
         fi
 
-        # Disable the service if it's enabled
-        if systemctl is-enabled --quiet sysmedic.service; then
-            echo "Disabling sysmedic service..."
-            systemctl disable sysmedic.service
+        if systemctl is-active --quiet sysmedic.websocket.service; then
+            echo "Stopping sysmedic websocket service..."
+            systemctl stop sysmedic.websocket.service
+        fi
+
+        # Disable the services if they're enabled
+        if systemctl is-enabled --quiet sysmedic.doctor.service; then
+            echo "Disabling sysmedic doctor service..."
+            systemctl disable sysmedic.doctor.service
+        fi
+
+        if systemctl is-enabled --quiet sysmedic.websocket.service; then
+            echo "Disabling sysmedic websocket service..."
+            systemctl disable sysmedic.websocket.service
         fi
         ;;
 

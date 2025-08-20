@@ -6,77 +6,78 @@ set -e
 
 case "$1" in
     configure)
-        # Create sysmedic user and group if they don't exist
-        if ! getent group sysmedic >/dev/null; then
-            addgroup --system sysmedic
-        fi
-
-        if ! getent passwd sysmedic >/dev/null; then
-            adduser --system --ingroup sysmedic --home /var/lib/sysmedic \
-                    --no-create-home --shell /bin/false sysmedic
-        fi
-
         # Create necessary directories
         mkdir -p /etc/sysmedic
         mkdir -p /var/lib/sysmedic
-        mkdir -p /var/log/sysmedic
 
-        # Set proper ownership and permissions
-        chown -R sysmedic:sysmedic /var/lib/sysmedic
-        chown -R sysmedic:sysmedic /var/log/sysmedic
+        # Set proper permissions
         chmod 755 /etc/sysmedic
-        chmod 750 /var/lib/sysmedic
-        chmod 750 /var/log/sysmedic
+        chmod 755 /var/lib/sysmedic
 
         # Create default config if it doesn't exist
         if [ ! -f /etc/sysmedic/config.yaml ]; then
             cat > /etc/sysmedic/config.yaml << 'EOF'
-# SysMedic Configuration
-server:
-  host: "127.0.0.1"
-  port: 8080
-  tls:
-    enabled: false
-
 monitoring:
-  interval: 5s
-  metrics:
-    cpu: true
-    memory: true
-    disk: true
-    network: true
-    processes: true
+  check_interval: 60
+  cpu_threshold: 80
+  memory_threshold: 80
+  persistent_time: 60
 
-storage:
-  type: "file"
-  path: "/var/lib/sysmedic/data"
-  retention: "30d"
+users:
+  cpu_threshold: 80
+  memory_threshold: 80
+  persistent_time: 60
 
-logging:
-  level: "info"
-  file: "/var/log/sysmedic/sysmedic.log"
-  max_size: "100MB"
-  max_files: 5
+reporting:
+  period: "hourly"
+  retain_days: 30
 
-alerts:
+email:
+  enabled: false
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  tls: true
+
+websocket:
   enabled: true
-  thresholds:
-    cpu_usage: 80
-    memory_usage: 85
-    disk_usage: 90
+  port: 8060
+  secret: ""
+
+user_filtering:
+  min_uid_for_real_users: 1000
+  ignore_system_users: true
+  min_cpu_percent: 5.0
+  min_memory_percent: 5.0
+  min_process_count: 1
+  excluded_users: ["root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data", "backup", "list", "irc", "gnats", "nobody", "systemd+", "syslog", "_apt"]
+  included_users: []
+
+data_path: "/var/lib/sysmedic"
+
+user_thresholds: {}
 EOF
-            chown sysmedic:sysmedic /etc/sysmedic/config.yaml
-            chmod 640 /etc/sysmedic/config.yaml
+            chmod 644 /etc/sysmedic/config.yaml
         fi
 
-        # Reload systemd and enable service
+        # Reload systemd and enable services
         systemctl daemon-reload
-        systemctl enable sysmedic.service
+        systemctl enable sysmedic.doctor.service
+        systemctl enable sysmedic.websocket.service
 
         echo "SysMedic has been installed successfully!"
         echo "Configuration file: /etc/sysmedic/config.yaml"
-        echo "Start the service with: sudo systemctl start sysmedic"
-        echo "View logs with: sudo journalctl -u sysmedic -f"
+        echo "Enable services with:"
+        echo "  sudo systemctl enable sysmedic.doctor"
+        echo "  sudo systemctl enable sysmedic.websocket"
+        echo "Start services with:"
+        echo "  sudo systemctl start sysmedic.doctor"
+        echo "  sudo systemctl start sysmedic.websocket"
+        echo "Or use the CLI:"
+        echo "  sysmedic daemon start"
+        echo "  sysmedic websocket start"
+        echo "View logs with:"
+        echo "  sudo journalctl -u sysmedic.doctor -f"
+        echo "  sudo journalctl -u sysmedic.websocket -f"
         ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

@@ -25,7 +25,13 @@ all: clean deps build
 build: deps
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
+	@echo "Running pre-build checks..."
+	@$(GOCMD) fmt ./...
+	@$(GOCMD) vet ./...
+	@echo "Compiling binary..."
 	CGO_ENABLED=1 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/sysmedic
+	@echo "Build completed successfully"
+	@ls -la $(BUILD_DIR)/$(BINARY_NAME)
 
 build-static: deps
 	@echo "Building static $(BINARY_NAME)..."
@@ -72,21 +78,34 @@ clean:
 
 install: build
 	@echo "Installing $(BINARY_NAME)..."
+	@echo "Checking for existing SysMedic daemons..."
+	@sudo systemctl stop sysmedic.doctor 2>/dev/null || true
+	@sudo systemctl stop sysmedic.websocket 2>/dev/null || true
+	@sudo pkill -f "sysmedic.*--doctor-daemon" 2>/dev/null || true
+	@sudo pkill -f "sysmedic.*--websocket-daemon" 2>/dev/null || true
+	@sleep 2
+	@echo "Installing binary..."
 	sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/
 	sudo chmod +x /usr/local/bin/$(BINARY_NAME)
 	@echo "Creating directories..."
 	sudo mkdir -p /etc/sysmedic
 	sudo mkdir -p /var/lib/sysmedic
-	@echo "Installing systemd service..."
-	sudo cp scripts/sysmedic.service /etc/systemd/system/
+	@echo "Installing systemd services..."
+	sudo cp scripts/sysmedic.doctor.service /etc/systemd/system/ 2>/dev/null || echo "Note: sysmedic.doctor.service not found"
+	sudo cp scripts/sysmedic.websocket.service /etc/systemd/system/ 2>/dev/null || echo "Note: sysmedic.websocket.service not found"
 	sudo systemctl daemon-reload
-	@echo "Installation complete. Enable with: sudo systemctl enable sysmedic"
+	@echo "Installation complete. Enable services with:"
+	@echo "  sudo systemctl enable sysmedic.doctor"
+	@echo "  sudo systemctl enable sysmedic.websocket"
 
 uninstall:
 	@echo "Uninstalling $(BINARY_NAME)..."
-	sudo systemctl stop sysmedic 2>/dev/null || true
-	sudo systemctl disable sysmedic 2>/dev/null || true
-	sudo rm -f /etc/systemd/system/sysmedic.service
+	sudo systemctl stop sysmedic.doctor 2>/dev/null || true
+	sudo systemctl stop sysmedic.websocket 2>/dev/null || true
+	sudo systemctl disable sysmedic.doctor 2>/dev/null || true
+	sudo systemctl disable sysmedic.websocket 2>/dev/null || true
+	sudo rm -f /etc/systemd/system/sysmedic.doctor.service
+	sudo rm -f /etc/systemd/system/sysmedic.websocket.service
 	sudo systemctl daemon-reload
 	sudo rm -f /usr/local/bin/$(BINARY_NAME)
 	@echo "Note: Configuration and data files in /etc/sysmedic and /var/lib/sysmedic are preserved"
@@ -125,8 +144,9 @@ package-deb: build-linux-amd64
 	# Copy binary
 	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(DIST_DIR)/deb/usr/local/bin/$(BINARY_NAME)
 
-	# Copy systemd service
-	cp scripts/sysmedic.service $(DIST_DIR)/deb/etc/systemd/system/ 2>/dev/null || true
+	# Copy systemd services
+	cp scripts/sysmedic.doctor.service $(DIST_DIR)/deb/etc/systemd/system/ 2>/dev/null || true
+	cp scripts/sysmedic.websocket.service $(DIST_DIR)/deb/etc/systemd/system/ 2>/dev/null || true
 
 	# Create control file
 	@echo "Package: sysmedic" > $(DIST_DIR)/deb/DEBIAN/control
@@ -143,13 +163,15 @@ package-deb: build-linux-amd64
 	@echo "#!/bin/bash" > $(DIST_DIR)/deb/DEBIAN/postinst
 	@echo "chmod +x /usr/local/bin/sysmedic" >> $(DIST_DIR)/deb/DEBIAN/postinst
 	@echo "systemctl daemon-reload" >> $(DIST_DIR)/deb/DEBIAN/postinst
-	@echo "echo 'SysMedic installed. Enable with: sudo systemctl enable sysmedic'" >> $(DIST_DIR)/deb/DEBIAN/postinst
+	@echo "echo 'SysMedic installed. Enable with: sudo systemctl enable sysmedic.doctor && sudo systemctl enable sysmedic.websocket'" >> $(DIST_DIR)/deb/DEBIAN/postinst
 	chmod +x $(DIST_DIR)/deb/DEBIAN/postinst
 
 	# Create prerm script
 	@echo "#!/bin/bash" > $(DIST_DIR)/deb/DEBIAN/prerm
-	@echo "systemctl stop sysmedic 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
-	@echo "systemctl disable sysmedic 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
+	@echo "systemctl stop sysmedic.doctor 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
+	@echo "systemctl stop sysmedic.websocket 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
+	@echo "systemctl disable sysmedic.doctor 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
+	@echo "systemctl disable sysmedic.websocket 2>/dev/null || true" >> $(DIST_DIR)/deb/DEBIAN/prerm
 	chmod +x $(DIST_DIR)/deb/DEBIAN/prerm
 
 	# Build package
@@ -167,8 +189,9 @@ package-rpm: build-linux-amd64
 	# Copy binary
 	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(DIST_DIR)/rpm/BUILD/usr/local/bin/$(BINARY_NAME)
 
-	# Copy systemd service
-	cp scripts/sysmedic.service $(DIST_DIR)/rpm/BUILD/etc/systemd/system/ 2>/dev/null || true
+	# Copy systemd services
+	cp scripts/sysmedic.doctor.service $(DIST_DIR)/rpm/BUILD/etc/systemd/system/ 2>/dev/null || true
+	cp scripts/sysmedic.websocket.service $(DIST_DIR)/rpm/BUILD/etc/systemd/system/ 2>/dev/null || true
 
 	# Create spec file
 	@echo "Name: sysmedic" > $(DIST_DIR)/rpm/SPECS/sysmedic.spec
@@ -185,7 +208,8 @@ package-rpm: build-linux-amd64
 	@echo "" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "%files" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "/usr/local/bin/sysmedic" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
-	@echo "/etc/systemd/system/sysmedic.service" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "/etc/systemd/system/sysmedic.doctor.service" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "/etc/systemd/system/sysmedic.websocket.service" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "%dir /etc/sysmedic" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "%dir /var/lib/sysmedic" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
@@ -194,8 +218,10 @@ package-rpm: build-linux-amd64
 	@echo "systemctl daemon-reload" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 	@echo "%preun" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
-	@echo "systemctl stop sysmedic 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
-	@echo "systemctl disable sysmedic 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "systemctl stop sysmedic.doctor 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "systemctl stop sysmedic.websocket 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "systemctl disable sysmedic.doctor 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
+	@echo "systemctl disable sysmedic.websocket 2>/dev/null || true" >> $(DIST_DIR)/rpm/SPECS/sysmedic.spec
 
 	# Build RPM (requires rpmbuild)
 	@which rpmbuild > /dev/null || (echo "rpmbuild not installed. Install with: sudo apt-get install rpm or sudo yum install rpm-build"; exit 1)

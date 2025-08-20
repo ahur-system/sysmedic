@@ -18,7 +18,8 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/sysmedic"
 DATA_DIR="/var/lib/sysmedic"
 SERVICE_DIR="/etc/systemd/system"
-SERVICE_FILE="sysmedic.service"
+DOCTOR_SERVICE_FILE="sysmedic.doctor.service"
+WEBSOCKET_SERVICE_FILE="sysmedic.websocket.service"
 
 # Functions
 log_info() {
@@ -77,6 +78,128 @@ check_system() {
     fi
 }
 
+stop_existing_daemons() {
+    log_info "Checking for existing SysMedic installation..."
+
+    # Check if SysMedic is already installed
+    if command -v sysmedic &> /dev/null; then
+        log_info "Existing SysMedic installation detected"
+        log_warning "⚠️  Cannot update while daemons are active!"
+
+        # Check if either daemon is running
+        DOCTOR_RUNNING=false
+        WEBSOCKET_RUNNING=false
+
+        if systemctl is-active --quiet sysmedic.doctor 2>/dev/null; then
+            DOCTOR_RUNNING=true
+            log_info "Doctor daemon is currently running"
+        elif pgrep -f "sysmedic.*--doctor-daemon" &> /dev/null; then
+            DOCTOR_RUNNING=true
+            log_info "Doctor daemon process is currently running"
+        fi
+
+        if systemctl is-active --quiet sysmedic.websocket 2>/dev/null; then
+            WEBSOCKET_RUNNING=true
+            log_info "WebSocket daemon is currently running"
+        elif pgrep -f "sysmedic.*--websocket-daemon" &> /dev/null; then
+            WEBSOCKET_RUNNING=true
+            log_info "WebSocket daemon process is currently running"
+        fi
+
+        # Stop daemons if running
+        if [[ "$DOCTOR_RUNNING" == true ]] || [[ "$WEBSOCKET_RUNNING" == true ]]; then
+            log_info "🛑 Stopping running daemons before installation..."
+
+            if [[ "$DOCTOR_RUNNING" == true ]]; then
+                log_info "Stopping doctor daemon..."
+
+                # Try systemctl first
+                if systemctl is-active --quiet sysmedic.doctor 2>/dev/null; then
+                    if systemctl stop sysmedic.doctor; then
+                        log_success "Doctor daemon stopped successfully"
+                    else
+                        log_error "Failed to stop doctor daemon via systemctl"
+                        exit 1
+                    fi
+                fi
+
+                # Stop any remaining processes
+                if pgrep -f "sysmedic.*--doctor-daemon" &> /dev/null; then
+                    log_info "Stopping doctor daemon process..."
+                    pkill -f "sysmedic.*--doctor-daemon" || true
+                    sleep 2
+
+                    # Force kill if still running
+                    if pgrep -f "sysmedic.*--doctor-daemon" &> /dev/null; then
+                        log_warning "Force stopping doctor daemon..."
+                        pkill -9 -f "sysmedic.*--doctor-daemon" || true
+                        sleep 1
+                    fi
+                fi
+            fi
+
+            if [[ "$WEBSOCKET_RUNNING" == true ]]; then
+                log_info "Stopping WebSocket daemon..."
+
+                # Try systemctl first
+                if systemctl is-active --quiet sysmedic.websocket 2>/dev/null; then
+                    if systemctl stop sysmedic.websocket; then
+                        log_success "WebSocket daemon stopped successfully"
+                    else
+                        log_error "Failed to stop WebSocket daemon via systemctl"
+                        exit 1
+                    fi
+                fi
+
+                # Stop any remaining processes
+                if pgrep -f "sysmedic.*--websocket-daemon" &> /dev/null; then
+                    log_info "Stopping WebSocket daemon process..."
+                    pkill -f "sysmedic.*--websocket-daemon" || true
+                    sleep 2
+
+                    # Force kill if still running
+                    if pgrep -f "sysmedic.*--websocket-daemon" &> /dev/null; then
+                        log_warning "Force stopping WebSocket daemon..."
+                        pkill -9 -f "sysmedic.*--websocket-daemon" || true
+                        sleep 1
+                    fi
+                fi
+            fi
+
+            # Final check - stop any remaining sysmedic processes
+            if pgrep -f "sysmedic" &> /dev/null; then
+                log_warning "Found additional SysMedic processes, stopping them..."
+                pkill -f "sysmedic" || true
+                sleep 3
+
+                # Force kill if still running
+                if pgrep -f "sysmedic" &> /dev/null; then
+                    log_warning "Force stopping remaining SysMedic processes..."
+                    pkill -9 -f "sysmedic" || true
+                    sleep 1
+                fi
+            fi
+
+            log_success "✅ All existing SysMedic daemons stopped"
+
+            # Final verification
+            if pgrep -f "sysmedic" &> /dev/null; then
+                log_error "❌ Failed to stop all SysMedic processes"
+                log_error "Manual intervention required. Please stop all SysMedic processes:"
+                log_error "  sudo pkill -9 -f sysmedic"
+                exit 1
+            fi
+
+            log_success "Installation can proceed safely"
+        else
+            log_info "No daemons are currently running"
+        fi
+
+    else
+        log_info "No existing SysMedic installation found"
+    fi
+}
+
 create_directories() {
     log_info "Creating directories..."
 
@@ -111,28 +234,43 @@ install_binary() {
 }
 
 install_service() {
-    log_info "Installing systemd service..."
+    log_info "Installing systemd services..."
 
-    if [[ -f "./scripts/$SERVICE_FILE" ]]; then
-        cp "./scripts/$SERVICE_FILE" "$SERVICE_DIR/$SERVICE_FILE"
-        chmod 644 "$SERVICE_DIR/$SERVICE_FILE"
-        systemctl daemon-reload
-        log_success "Installed systemd service"
-    elif [[ -f "./$SERVICE_FILE" ]]; then
-        cp "./$SERVICE_FILE" "$SERVICE_DIR/$SERVICE_FILE"
-        chmod 644 "$SERVICE_DIR/$SERVICE_FILE"
-        systemctl daemon-reload
-        log_success "Installed systemd service"
+    # Install doctor service
+    if [[ -f "./scripts/$DOCTOR_SERVICE_FILE" ]]; then
+        cp "./scripts/$DOCTOR_SERVICE_FILE" "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+        chmod 644 "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+        log_success "Installed doctor daemon service"
+    elif [[ -f "./$DOCTOR_SERVICE_FILE" ]]; then
+        cp "./$DOCTOR_SERVICE_FILE" "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+        chmod 644 "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+        log_success "Installed doctor daemon service"
     else
-        log_warning "Service file not found, creating basic service..."
-        create_basic_service
+        log_warning "Doctor service file not found, creating basic service..."
+        create_doctor_service
     fi
+
+    # Install websocket service
+    if [[ -f "./scripts/$WEBSOCKET_SERVICE_FILE" ]]; then
+        cp "./scripts/$WEBSOCKET_SERVICE_FILE" "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+        chmod 644 "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+        log_success "Installed WebSocket daemon service"
+    elif [[ -f "./$WEBSOCKET_SERVICE_FILE" ]]; then
+        cp "./$WEBSOCKET_SERVICE_FILE" "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+        chmod 644 "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+        log_success "Installed WebSocket daemon service"
+    else
+        log_warning "WebSocket service file not found, creating basic service..."
+        create_websocket_service
+    fi
+
+    systemctl daemon-reload
 }
 
-create_basic_service() {
-    cat > "$SERVICE_DIR/$SERVICE_FILE" << EOF
+create_doctor_service() {
+    cat > "$SERVICE_DIR/$DOCTOR_SERVICE_FILE" << EOF
 [Unit]
-Description=SysMedic System Monitoring Daemon
+Description=SysMedic Doctor - System Monitoring Daemon
 Documentation=https://github.com/sysmedic/sysmedic
 After=network.target
 Wants=network.target
@@ -141,19 +279,52 @@ Wants=network.target
 Type=simple
 User=root
 Group=root
-ExecStart=$INSTALL_DIR/$BINARY_NAME daemon start
-ExecStop=$INSTALL_DIR/$BINARY_NAME daemon stop
-PIDFile=/var/run/sysmedic.pid
+ExecStart=$INSTALL_DIR/$BINARY_NAME --doctor-daemon
+ExecReload=/bin/kill -HUP \$MAINPID
+PIDFile=$DATA_DIR/sysmedic.doctor.pid
 Restart=on-failure
 RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=SYSMEDIC_CONFIG=$CONFIG_DIR/config.yaml
+Environment=SYSMEDIC_DATA=$DATA_DIR
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    systemctl daemon-reload
-    log_success "Created basic systemd service"
+    log_success "Created basic doctor daemon service"
+}
+
+create_websocket_service() {
+    cat > "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE" << EOF
+[Unit]
+Description=SysMedic WebSocket - Remote Monitoring Server
+Documentation=https://github.com/sysmedic/sysmedic
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=$INSTALL_DIR/$BINARY_NAME --websocket-daemon
+ExecReload=/bin/kill -HUP \$MAINPID
+PIDFile=$DATA_DIR/sysmedic.websocket.pid
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=SYSMEDIC_CONFIG=$CONFIG_DIR/config.yaml
+Environment=SYSMEDIC_DATA=$DATA_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    log_success "Created basic WebSocket daemon service"
 }
 
 install_config() {
@@ -222,11 +393,18 @@ verify_installation() {
         exit 1
     fi
 
-    # Check service
-    if systemctl list-unit-files | grep -q "$BINARY_NAME.service"; then
-        log_success "Systemd service installed"
+    # Check services
+    if systemctl list-unit-files | grep -q "sysmedic.doctor.service"; then
+        log_success "Doctor daemon service installed"
     else
-        log_error "Systemd service installation failed"
+        log_error "Doctor daemon service installation failed"
+        exit 1
+    fi
+
+    if systemctl list-unit-files | grep -q "sysmedic.websocket.service"; then
+        log_success "WebSocket daemon service installed"
+    else
+        log_error "WebSocket daemon service installation failed"
         exit 1
     fi
 
@@ -244,42 +422,74 @@ verify_installation() {
 show_next_steps() {
     log_success "SysMedic installation completed successfully!"
     echo
+    log_info "🎯 Single Binary Multi-Daemon Architecture Installed"
+    echo "   One binary (11MB) with independent daemon processes"
+    echo
     log_info "Next steps:"
     echo "  1. Review configuration: $CONFIG_DIR/config.yaml"
-    echo "  2. Enable service: sudo systemctl enable $BINARY_NAME"
-    echo "  3. Start service: sudo systemctl start $BINARY_NAME"
-    echo "  4. Check status: $BINARY_NAME"
+    echo "  2. Enable both daemon services:"
+    echo "     sudo systemctl enable sysmedic.doctor"
+    echo "     sudo systemctl enable sysmedic.websocket"
+    echo "  3. Start both daemon services:"
+    echo "     sudo systemctl start sysmedic.doctor"
+    echo "     sudo systemctl start sysmedic.websocket"
+    echo "  4. Verify status: $BINARY_NAME daemon status"
     echo
-    log_info "Quick commands:"
-    echo "  • View dashboard: $BINARY_NAME"
-    echo "  • Start daemon: sudo $BINARY_NAME daemon start"
-    echo "  • View reports: $BINARY_NAME reports"
-    echo "  • Show config: $BINARY_NAME config show"
+    log_info "🚀 Quick commands:"
+    echo "  • CLI interface: $BINARY_NAME"
+    echo "  • Start doctor daemon: $BINARY_NAME daemon start"
+    echo "  • Start WebSocket daemon: $BINARY_NAME websocket start"
+    echo "  • Check both daemon status: $BINARY_NAME daemon status"
+    echo "  • View monitoring reports: $BINARY_NAME reports"
+    echo "  • Show configuration: $BINARY_NAME config show"
+    echo "  • Test binary: $BINARY_NAME --version"
     echo
-    log_info "Documentation: https://github.com/sysmedic/sysmedic"
+    log_info "🌐 Remote Access:"
+    echo "  • WebSocket server: ws://localhost:8060/ws"
+    echo "  • Access from CLI: $BINARY_NAME websocket status"
+    echo
+    log_info "📊 Process Architecture:"
+    echo "  • Doctor daemon: System monitoring (independent process)"
+    echo "  • WebSocket daemon: Remote access (independent process)"
+    echo "  • CLI interface: Direct binary execution"
+    echo
+    log_info "📚 Documentation: https://github.com/ahur-system/sysmedic"
 }
 
 cleanup_on_error() {
     log_error "Installation failed. Cleaning up..."
 
+    # Stop and disable both daemon services
+    systemctl stop sysmedic.doctor 2>/dev/null || true
+    systemctl stop sysmedic.websocket 2>/dev/null || true
+    systemctl disable sysmedic.doctor 2>/dev/null || true
+    systemctl disable sysmedic.websocket 2>/dev/null || true
+
     # Remove binary
     rm -f "$INSTALL_DIR/$BINARY_NAME"
 
-    # Remove service
-    systemctl stop "$BINARY_NAME" 2>/dev/null || true
-    systemctl disable "$BINARY_NAME" 2>/dev/null || true
-    rm -f "$SERVICE_DIR/$SERVICE_FILE"
+    # Remove both service files
+    rm -f "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+    rm -f "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+
+    # Reload systemd to reflect changes
     systemctl daemon-reload
 
-    log_info "Cleanup completed"
+    # Remove directories (but keep config if it was customized)
+    rmdir "$DATA_DIR" 2>/dev/null || true
+
+    log_info "Cleanup completed - single binary multi-daemon installation removed"
     exit 1
 }
 
 # Main installation function
 main() {
-    echo "=========================================="
-    echo "       SysMedic Installation Script      "
-    echo "=========================================="
+    echo "================================================="
+    echo "    SysMedic Single Binary Multi-Daemon Setup   "
+    echo "================================================="
+    echo "  Installing single binary with independent"
+    echo "  doctor (monitoring) and WebSocket daemons"
+    echo "================================================="
     echo
 
     # Set trap for cleanup on error
@@ -288,6 +498,7 @@ main() {
     # Run installation steps
     check_root
     check_system
+    stop_existing_daemons
     create_directories
     install_binary
     install_service
@@ -314,20 +525,36 @@ case "${1:-}" in
         ;;
     --uninstall)
         check_root
-        log_info "Uninstalling SysMedic..."
+        log_info "Uninstalling SysMedic single binary multi-daemon architecture..."
 
-        # Stop and disable service
-        systemctl stop "$BINARY_NAME" 2>/dev/null || true
-        systemctl disable "$BINARY_NAME" 2>/dev/null || true
+        # Stop and disable both daemon services
+        log_info "Stopping daemon services..."
+        systemctl stop sysmedic.doctor 2>/dev/null || true
+        systemctl stop sysmedic.websocket 2>/dev/null || true
 
-        # Remove files
+        # Also stop any running processes
+        pkill -f "sysmedic.*--doctor-daemon" 2>/dev/null || true
+        pkill -f "sysmedic.*--websocket-daemon" 2>/dev/null || true
+        sleep 2
+
+        log_info "Disabling daemon services..."
+        systemctl disable sysmedic.doctor 2>/dev/null || true
+        systemctl disable sysmedic.websocket 2>/dev/null || true
+
+        # Remove binary and service files
+        log_info "Removing binary and service files..."
         rm -f "$INSTALL_DIR/$BINARY_NAME"
-        rm -f "$SERVICE_DIR/$SERVICE_FILE"
+        rm -f "$SERVICE_DIR/$DOCTOR_SERVICE_FILE"
+        rm -f "$SERVICE_DIR/$WEBSOCKET_SERVICE_FILE"
+
+        # Reload systemd
         systemctl daemon-reload
 
-        log_success "SysMedic uninstalled successfully"
-        log_info "Configuration and data files preserved in $CONFIG_DIR and $DATA_DIR"
-        log_info "To remove completely: sudo rm -rf $CONFIG_DIR $DATA_DIR"
+        log_success "SysMedic single binary multi-daemon system uninstalled successfully"
+        log_info "Configuration preserved: $CONFIG_DIR"
+        log_info "Data preserved: $DATA_DIR"
+        log_info "To remove all data: sudo rm -rf $CONFIG_DIR $DATA_DIR"
+        log_info "Both doctor and WebSocket daemon services have been removed"
         exit 0
         ;;
     --version)
