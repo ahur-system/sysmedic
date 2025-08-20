@@ -15,16 +15,32 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/ahur-system/sysmedic/internal/config"
 	"github.com/ahur-system/sysmedic/internal/monitor"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow connections from any origin
 	},
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
+
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+
+	// Maximum message size allowed from peer.
+	maxMessageSize = 512
+)
 
 type Server struct {
 	port     int
@@ -151,47 +167,72 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Configure connection
+	conn.SetReadLimit(maxMessageSize)
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
 	s.mu.Lock()
 	s.clients[conn] = true
 	clientCount := len(s.clients)
 	s.mu.Unlock()
+	defer s.removeClient(conn)
 
 	log.Printf("New WebSocket client connected. Total clients: %d", clientCount)
 
 	// Send welcome message with system information
 	systemInfo := s.getSystemInfo()
-	welcome := Message{
-		Type:      "welcome",
-		Data:      map[string]interface{}{
+	welcome := map[string]interface{}{
+		"type": "welcome",
+		"data": map[string]interface{}{
 			"message": "Connected to SysMedic",
 			"version": "1.0.5",
 			"system":  systemInfo["system"],
 			"status":  systemInfo["status"],
 			"daemon":  systemInfo["daemon"],
 		},
-		Timestamp: time.Now(),
+		"timestamp": time.Now().Format("2006-01-02T15:04:05Z"),
 	}
+	conn.SetWriteDeadline(time.Now().Add(writeWait))
 	if err := conn.WriteJSON(welcome); err != nil {
 		log.Printf("Error sending welcome message: %v", err)
-		s.removeClient(conn)
 		return
 	}
 
-	// Start sending periodic system updates
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	// Create channels for coordination
+	done := make(chan struct{})
 
-	// Handle incoming messages from client
-	go s.handleClientMessages(conn)
+	// Start message reader goroutine
+	go s.readPump(conn, done)
 
+	// Start sending periodic system updates every 3 seconds
+	dataTicker := time.NewTicker(3 * time.Second)
+	defer dataTicker.Stop()
+
+	// Set up ping ticker
+	pingTicker := time.NewTicker(pingPeriod)
+	defer pingTicker.Stop()
+
+	// Main loop for sending data and pings
 	for {
 		select {
-		case <-ticker.C:
+		case <-dataTicker.C:
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := s.sendSystemUpdate(conn); err != nil {
 				log.Printf("Error sending system update: %v", err)
-				s.removeClient(conn)
 				return
 			}
+		case <-pingTicker.C:
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("Failed to send ping: %v", err)
+				return
+			}
+		case <-done:
+			return
 		}
 	}
 }
@@ -203,12 +244,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	status := map[string]interface{}{
-		"status":      "healthy",
-		"running":     running,
-		"clients":     clientCount,
-		"port":        s.port,
-		"hostname":    s.hostname,
-		"has_secret":  s.secret != "",
+		"status":     "healthy",
+		"running":    running,
+		"clients":    clientCount,
+		"port":       s.port,
+		"hostname":   s.hostname,
+		"has_secret": s.secret != "",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -217,12 +258,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		status["status"], status["running"], status["clients"], status["port"], status["hostname"], status["has_secret"])
 }
 
-func (s *Server) handleClientMessages(conn *websocket.Conn) {
+func (s *Server) readPump(conn *websocket.Conn, done chan struct{}) {
+	defer close(done)
+
 	for {
 		var request ClientRequest
 		err := conn.ReadJSON(&request)
 		if err != nil {
-			log.Printf("Error reading client message: %v", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error: %v", err)
+			} else {
+				log.Printf("WebSocket connection closed: %v", err)
+			}
 			return
 		}
 
@@ -271,7 +318,7 @@ func (s *Server) sendAlerts(conn *websocket.Conn, requestID string) {
 		"unresolved_count": 0,
 		"total_count":      0,
 		"recent_alerts":    []string{},
-		"status":          "No active alerts",
+		"status":           "No active alerts",
 	}
 
 	response := Message{
@@ -317,7 +364,7 @@ func (s *Server) sendConfig(conn *websocket.Conn, requestID string) {
 		"monitoring_interval": cfg.GetCheckInterval().String(),
 		"cpu_threshold":       cfg.Monitoring.CPUThreshold,
 		"memory_threshold":    cfg.Monitoring.MemoryThreshold,
-		"version":            "1.0.5",
+		"version":             "1.0.5",
 	}
 
 	response := Message{
@@ -348,6 +395,7 @@ func (s *Server) sendPong(conn *websocket.Conn, requestID string) {
 		Timestamp: time.Now(),
 		RequestID: requestID,
 	}
+	conn.SetWriteDeadline(time.Now().Add(writeWait))
 	conn.WriteJSON(response)
 }
 
@@ -367,21 +415,32 @@ func (s *Server) sendSystemUpdate(conn *websocket.Conn) error {
 	if err != nil {
 		log.Printf("Error getting system metrics: %v", err)
 		// Fall back to basic data
-		metrics = map[string]interface{}{
-			"cpu_usage":    0.0,
-			"memory_usage": 0.0,
-			"disk_usage":   0.0,
-			"uptime":       "unknown",
-			"error":        "Failed to get system metrics",
+		update := map[string]interface{}{
+			"type": "system_update",
+			"data": map[string]interface{}{
+				"cpu_usage":    0.0,
+				"memory_usage": 0.0,
+				"disk_usage":   0.0,
+				"uptime":       "unknown",
+			},
+			"timestamp": time.Now().Format("2006-01-02T15:04:05Z"),
 		}
+		conn.SetWriteDeadline(time.Now().Add(writeWait))
+		return conn.WriteJSON(update)
 	}
 
-	update := Message{
-		Type:      "system_update",
-		Data:      metrics,
-		Timestamp: time.Now(),
+	update := map[string]interface{}{
+		"type": "system_update",
+		"data": map[string]interface{}{
+			"cpu_usage":    metrics["cpu_usage"],
+			"memory_usage": metrics["memory_usage"],
+			"disk_usage":   metrics["disk_usage"],
+			"uptime":       metrics["uptime"],
+		},
+		"timestamp": time.Now().Format("2006-01-02T15:04:05Z"),
 	}
 
+	conn.SetWriteDeadline(time.Now().Add(writeWait))
 	return conn.WriteJSON(update)
 }
 
@@ -454,6 +513,23 @@ func (s *Server) GetConnectionURL() string {
 		return ""
 	}
 	return fmt.Sprintf("sysmedic://%s@%s:%d/", s.secret, s.hostname, s.port)
+}
+
+// getSystemStatusFromMetrics determines system status from metrics
+func (s *Server) getSystemStatusFromMetrics(systemMetrics *monitor.SystemMetrics, cfg *config.Config) string {
+	cpuThreshold := float64(cfg.Monitoring.CPUThreshold)
+	memoryThreshold := float64(cfg.Monitoring.MemoryThreshold)
+
+	if systemMetrics.CPUPercent > cpuThreshold || systemMetrics.MemoryPercent > memoryThreshold {
+		return "High Usage"
+	}
+
+	// Check for moderate usage
+	if systemMetrics.CPUPercent > cpuThreshold*0.7 || systemMetrics.MemoryPercent > memoryThreshold*0.7 {
+		return "Moderate Usage"
+	}
+
+	return "Light Usage"
 }
 
 func (s *Server) IsRunning() bool {
@@ -575,8 +651,17 @@ func (s *Server) getSystemInfo() map[string]interface{} {
 	}
 
 	// Get system status using SysMedic's monitor logic
-	if status := s.getSystemStatus(); status != "" {
-		systemInfo["status"] = status
+	// Get system status using actual metrics
+	cfg, err := config.LoadConfig("")
+	if err == nil {
+		mon := monitor.NewMonitor(cfg)
+		if systemMetrics, err := mon.GetSystemMetrics(); err == nil {
+			systemInfo["status"] = s.getSystemStatusFromMetrics(systemMetrics, cfg)
+		} else {
+			systemInfo["status"] = "Unknown"
+		}
+	} else {
+		systemInfo["status"] = "Unknown"
 	}
 
 	return systemInfo

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/glebarez/go-sqlite"
 	"github.com/ahur-system/sysmedic/internal/monitor"
+	_ "github.com/glebarez/go-sqlite"
 )
 
 // Storage handles database operations for SysMedic
@@ -17,27 +17,27 @@ type Storage struct {
 
 // Alert represents a system alert record
 type Alert struct {
-	ID          int64
-	Timestamp   time.Time
-	AlertType   string // "system" or "user"
-	Severity    string // "light", "medium", "heavy"
-	Message     string
-	Duration    time.Duration
+	ID           int64
+	Timestamp    time.Time
+	AlertType    string // "system" or "user"
+	Severity     string // "light", "medium", "heavy"
+	Message      string
+	Duration     time.Duration
 	PrimaryCause string
 	UserDetails  string
-	Resolved    bool
-	ResolvedAt  *time.Time
+	Resolved     bool
+	ResolvedAt   *time.Time
 }
 
 // UserActivity represents historical user activity
 type UserActivity struct {
-	ID           int64
-	Username     string
-	Timestamp    time.Time
-	CPUPercent   float64
+	ID            int64
+	Username      string
+	Timestamp     time.Time
+	CPUPercent    float64
 	MemoryPercent float64
-	ProcessCount int
-	PIDs         string // JSON encoded PID list
+	ProcessCount  int
+	PIDs          string // JSON encoded PID list
 }
 
 // SystemActivity represents historical system metrics
@@ -620,10 +620,10 @@ func (s *Storage) GetDatabaseStats() (map[string]int, error) {
 	stats := make(map[string]int)
 
 	queries := map[string]string{
-		"system_metrics":   "SELECT COUNT(*) FROM system_metrics",
-		"user_metrics":     "SELECT COUNT(*) FROM user_metrics",
-		"alerts":           "SELECT COUNT(*) FROM alerts",
-		"persistent_users": "SELECT COUNT(*) FROM persistent_users",
+		"system_metrics":    "SELECT COUNT(*) FROM system_metrics",
+		"user_metrics":      "SELECT COUNT(*) FROM user_metrics",
+		"alerts":            "SELECT COUNT(*) FROM alerts",
+		"persistent_users":  "SELECT COUNT(*) FROM persistent_users",
 		"unresolved_alerts": "SELECT COUNT(*) FROM alerts WHERE resolved = FALSE",
 	}
 

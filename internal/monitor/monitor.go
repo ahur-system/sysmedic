@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -16,13 +17,13 @@ import (
 
 // SystemMetrics represents overall system resource usage
 type SystemMetrics struct {
-	Timestamp    time.Time
-	CPUPercent   float64
+	Timestamp     time.Time
+	CPUPercent    float64
 	MemoryPercent float64
-	NetworkMBps  float64
-	LoadAvg1     float64
-	LoadAvg5     float64
-	LoadAvg15    float64
+	NetworkMBps   float64
+	LoadAvg1      float64
+	LoadAvg5      float64
+	LoadAvg15     float64
 }
 
 // UserMetrics represents per-user resource usage
@@ -37,19 +38,19 @@ type UserMetrics struct {
 
 // PersistentUser tracks users with sustained high usage
 type PersistentUser struct {
-	Username    string
-	Metric      string // "cpu" or "memory"
-	StartTime   time.Time
-	Duration    time.Duration
+	Username     string
+	Metric       string // "cpu" or "memory"
+	StartTime    time.Time
+	Duration     time.Duration
 	CurrentUsage float64
 }
 
 // Monitor handles system and user monitoring
 type Monitor struct {
-	lastCPUTimes map[string]CPUTimes
-	lastNetStats NetworkStats
+	lastCPUTimes   map[string]CPUTimes
+	lastNetStats   NetworkStats
 	lastSampleTime time.Time
-	config Config
+	config         Config
 }
 
 // Config interface for monitor configuration
@@ -59,14 +60,14 @@ type Config interface {
 
 // CPUTimes represents CPU time statistics
 type CPUTimes struct {
-	User   uint64
-	Nice   uint64
-	System uint64
-	Idle   uint64
-	IOWait uint64
-	IRQ    uint64
+	User    uint64
+	Nice    uint64
+	System  uint64
+	Idle    uint64
+	IOWait  uint64
+	IRQ     uint64
 	SoftIRQ uint64
-	Total  uint64
+	Total   uint64
 }
 
 // NetworkStats represents network interface statistics
@@ -89,6 +90,14 @@ func NewMonitor(config Config) *Monitor {
 	return &Monitor{
 		lastCPUTimes: make(map[string]CPUTimes),
 		config:       config,
+	}
+}
+
+// New creates a new monitor with the given configuration
+func New(cfg *config.Config, store interface{}) *Monitor {
+	return &Monitor{
+		lastCPUTimes: make(map[string]CPUTimes),
+		config:       cfg,
 	}
 }
 
@@ -589,4 +598,96 @@ func (m *Monitor) shouldTrackUser(userMetric UserMetrics) bool {
 	}
 
 	return true
+}
+
+// GetCurrentSystemData returns current system data for WebSocket clients
+func GetCurrentSystemData() map[string]interface{} {
+	// Create a monitor instance with default config
+	cfg := &DefaultConfig{}
+	monitor := NewMonitor(cfg)
+
+	// Get system metrics
+	systemMetrics, err := monitor.GetSystemMetrics()
+	if err != nil {
+		systemMetrics = &SystemMetrics{
+			Timestamp:     time.Now(),
+			CPUPercent:    0,
+			MemoryPercent: 0,
+			NetworkMBps:   0,
+			LoadAvg1:      0,
+			LoadAvg5:      0,
+			LoadAvg15:     0,
+		}
+	}
+
+	// Get user metrics
+	userMetrics, err := monitor.GetUserMetrics()
+	if err != nil {
+		userMetrics = []UserMetrics{}
+	}
+
+	// Prepare response data
+	return map[string]interface{}{
+		"system": map[string]interface{}{
+			"cpu":     systemMetrics.CPUPercent,
+			"memory":  systemMetrics.MemoryPercent,
+			"network": systemMetrics.NetworkMBps,
+			"load1":   systemMetrics.LoadAvg1,
+			"load5":   systemMetrics.LoadAvg5,
+			"load15":  systemMetrics.LoadAvg15,
+		},
+		"users":     userMetrics,
+		"timestamp": systemMetrics.Timestamp.Unix(),
+	}
+}
+
+// DefaultConfig provides a default configuration for monitoring
+type DefaultConfig struct{}
+
+func (c *DefaultConfig) GetUserFiltering() config.UserFilteringConfig {
+	return config.UserFilteringConfig{
+		IncludedUsers:    []string{},
+		ExcludedUsers:    []string{"root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data", "backup", "list", "irc", "gnats", "nobody", "systemd+", "syslog", "_apt"},
+		MinCPUPercent:    1.0,
+		MinMemoryPercent: 1.0,
+		MinProcessCount:  1,
+	}
+}
+
+// Start begins the monitoring process in a context-aware loop
+func (m *Monitor) Start(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second) // Default monitoring interval
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Perform monitoring cycle
+			if err := m.performMonitoringCycle(); err != nil {
+				// Log error but continue monitoring
+				continue
+			}
+		}
+	}
+}
+
+// performMonitoringCycle executes one monitoring cycle
+func (m *Monitor) performMonitoringCycle() error {
+	// Get system metrics
+	_, err := m.GetSystemMetrics()
+	if err != nil {
+		return err
+	}
+
+	// Get user metrics
+	_, err = m.GetUserMetrics()
+	if err != nil {
+		return err
+	}
+
+	// Note: Storage operations should be handled by the daemon layer
+	// to avoid circular dependencies
+	return nil
 }

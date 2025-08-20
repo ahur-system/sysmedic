@@ -14,7 +14,14 @@ import (
 	"github.com/ahur-system/sysmedic/internal/config"
 	"github.com/ahur-system/sysmedic/internal/monitor"
 	"github.com/ahur-system/sysmedic/internal/storage"
+	"github.com/ahur-system/sysmedic/internal/websocket"
 )
+
+// CreatePIDFile creates a PID file with the current process ID
+func CreatePIDFile(pidFile string) error {
+	pid := os.Getpid()
+	return os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0644)
+}
 
 // Daemon represents the SysMedic background monitoring daemon
 type Daemon struct {
@@ -34,15 +41,15 @@ type PersistentTracker struct {
 
 // UserTrackingState tracks the state of a user's resource usage over time
 type UserTrackingState struct {
-	Username        string
-	CPUStartTime    *time.Time
-	MemoryStartTime *time.Time
-	CPUPeakUsage    float64
-	MemoryPeakUsage float64
-	CPUTotalUsage   float64
+	Username         string
+	CPUStartTime     *time.Time
+	MemoryStartTime  *time.Time
+	CPUPeakUsage     float64
+	MemoryPeakUsage  float64
+	CPUTotalUsage    float64
 	MemoryTotalUsage float64
-	CPUSamples      int
-	MemorySamples   int
+	CPUSamples       int
+	MemorySamples    int
 }
 
 // NewDaemon creates a new daemon instance
@@ -104,6 +111,9 @@ func (d *Daemon) Start() error {
 
 	fmt.Printf("SysMedic daemon started (PID: %d)\n", os.Getpid())
 	fmt.Printf("Monitoring interval: %v\n", d.config.GetCheckInterval())
+
+	// Start WebSocket server if enabled
+	d.startWebSocketIfEnabled()
 
 	// Cleanup old data on startup
 	go d.performMaintenance()
@@ -412,6 +422,9 @@ func (d *Daemon) performMaintenance() {
 func (d *Daemon) cleanup() error {
 	fmt.Println("Cleaning up daemon resources...")
 
+	// Stop WebSocket server if running
+	d.stopWebSocketIfRunning()
+
 	// Close storage
 	if err := d.storage.Close(); err != nil {
 		fmt.Printf("Error closing storage: %v\n", err)
@@ -449,6 +462,31 @@ func (d *Daemon) removePIDFile() error {
 		return nil // File doesn't exist, nothing to remove
 	}
 	return os.Remove(d.pidFile)
+}
+
+// startWebSocketIfEnabled starts the WebSocket server if it's enabled in config
+func (d *Daemon) startWebSocketIfEnabled() {
+	// Check main config for WebSocket settings
+	if d.config.WebSocket.Enabled {
+		manager := websocket.GetManager()
+		if err := manager.StartServer(d.config.WebSocket.Port); err != nil {
+			fmt.Printf("Warning: Could not start WebSocket server: %v\n", err)
+		} else {
+			fmt.Printf("WebSocket server started on port %d\n", d.config.WebSocket.Port)
+		}
+	}
+}
+
+// stopWebSocketIfRunning stops the WebSocket server if it's running
+func (d *Daemon) stopWebSocketIfRunning() {
+	manager := websocket.GetManager()
+	if manager.IsRunning() {
+		if err := manager.StopServer(); err != nil {
+			fmt.Printf("Warning: Could not stop WebSocket server: %v\n", err)
+		} else {
+			fmt.Printf("WebSocket server stopped\n")
+		}
+	}
 }
 
 // RunInForeground runs the daemon in the foreground (for testing/debugging)

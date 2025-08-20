@@ -21,13 +21,13 @@ type AlertManager struct {
 
 // AlertContext contains information for generating alerts
 type AlertContext struct {
-	SystemMetrics    *monitor.SystemMetrics
-	UserMetrics      []monitor.UserMetrics
-	PersistentUsers  []monitor.PersistentUser
-	SystemStatus     string
-	Duration         time.Duration
-	PrimaryCause     string
-	Recommendations  []string
+	SystemMetrics   *monitor.SystemMetrics
+	UserMetrics     []monitor.UserMetrics
+	PersistentUsers []monitor.PersistentUser
+	SystemStatus    string
+	Duration        time.Duration
+	PrimaryCause    string
+	Recommendations []string
 }
 
 // NewAlertManager creates a new alert manager

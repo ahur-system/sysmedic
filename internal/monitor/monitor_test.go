@@ -15,11 +15,11 @@ func (tc *testConfig) GetUserFiltering() config.UserFilteringConfig {
 	return config.UserFilteringConfig{
 		MinUIDForRealUsers: 1000,
 		IgnoreSystemUsers:  true,
-		MinCPUPercent:     5.0,
-		MinMemoryPercent:  5.0,
-		MinProcessCount:   1,
-		ExcludedUsers:     []string{"root", "daemon", "sshd"},
-		IncludedUsers:     []string{},
+		MinCPUPercent:      5.0,
+		MinMemoryPercent:   5.0,
+		MinProcessCount:    1,
+		ExcludedUsers:      []string{"root", "daemon", "sshd"},
+		IncludedUsers:      []string{},
 	}
 }
 
@@ -351,9 +351,9 @@ func TestCreateTestUserMetrics(t *testing.T) {
 // Test edge cases
 func TestDetermineSystemStatusEdgeCases(t *testing.T) {
 	tests := []struct {
-		name            string
-		systemMetrics   *SystemMetrics
-		expectedStatus  string
+		name           string
+		systemMetrics  *SystemMetrics
+		expectedStatus string
 	}{
 		{
 			name: "Exactly at threshold",

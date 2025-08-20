@@ -2,17 +2,21 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ahur-system/sysmedic/internal/config"
 	"github.com/ahur-system/sysmedic/internal/daemon"
 	"github.com/ahur-system/sysmedic/internal/monitor"
 	"github.com/ahur-system/sysmedic/internal/storage"
-	"github.com/ahur-system/sysmedic/internal/websocket"
 )
 
 // ShowDashboard displays the main system dashboard
@@ -154,78 +158,31 @@ func ShowDashboard() {
 
 // StartDaemon starts the monitoring daemon
 func StartDaemon() {
-	cfg, err := config.LoadConfig("")
-	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+	fmt.Println("Starting SysMedic Doctor daemon...")
+	if err := startDoctorDaemon(); err != nil {
+		fmt.Printf("Error starting doctor daemon: %v\n", err)
 		os.Exit(1)
 	}
-
-	d, err := daemon.NewDaemon(cfg)
-	if err != nil {
-		fmt.Printf("Error creating daemon: %v\n", err)
-		os.Exit(1)
-	}
-
-	if d.IsRunning() {
-		fmt.Println("Daemon is already running")
-		return
-	}
-
-	fmt.Println("Starting SysMedic daemon...")
-	if err := d.Start(); err != nil {
-		fmt.Printf("Error starting daemon: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Println("SysMedic Doctor daemon started successfully")
 }
 
 // StopDaemon stops the monitoring daemon
 func StopDaemon() {
-	cfg, err := config.LoadConfig("")
-	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+	fmt.Println("Stopping SysMedic Doctor daemon...")
+	if err := stopDoctorDaemon(); err != nil {
+		fmt.Printf("Error stopping doctor daemon: %v\n", err)
 		os.Exit(1)
 	}
-
-	d, err := daemon.NewDaemon(cfg)
-	if err != nil {
-		fmt.Printf("Error creating daemon: %v\n", err)
-		os.Exit(1)
-	}
-
-	if !d.IsRunning() {
-		fmt.Println("Daemon is not running")
-		return
-	}
-
-	fmt.Println("Stopping SysMedic daemon...")
-	if err := d.Stop(); err != nil {
-		fmt.Printf("Error stopping daemon: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Daemon stopped successfully")
+	fmt.Println("SysMedic Doctor daemon stopped successfully")
 }
 
-// DaemonStatus shows the daemon status
+// DaemonStatus shows the current daemon status
 func DaemonStatus() {
-	cfg, err := config.LoadConfig("")
-	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
-		os.Exit(1)
-	}
+	doctorStatus := getDoctorDaemonStatus()
+	websocketStatus := getWebSocketDaemonStatus()
 
-	d, err := daemon.NewDaemon(cfg)
-	if err != nil {
-		fmt.Printf("Error creating daemon: %v\n", err)
-		os.Exit(1)
-	}
-
-	status, err := d.GetStatus()
-	if err != nil {
-		fmt.Printf("Error getting daemon status: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Daemon status: %s\n", status)
+	fmt.Printf("SysMedic Doctor daemon: %s\n", doctorStatus)
+	fmt.Printf("SysMedic WebSocket daemon: %s\n", websocketStatus)
 }
 
 // ShowConfig displays the current configuration
@@ -298,7 +255,7 @@ func SetConfig(key, value string) {
 		os.Exit(1)
 	}
 
-	if err := config.SaveConfig(cfg, ""); err != nil {
+	if err := config.SaveConfig(cfg); err != nil {
 		fmt.Printf("Error saving config: %v\n", err)
 		os.Exit(1)
 	}
@@ -322,7 +279,7 @@ func SetUserConfig(username, key, value string) {
 
 	cfg.SetUserThreshold(username, key, intValue)
 
-	if err := config.SaveConfig(cfg, ""); err != nil {
+	if err := config.SaveConfig(cfg); err != nil {
 		fmt.Printf("Error saving config: %v\n", err)
 		os.Exit(1)
 	}
@@ -543,11 +500,11 @@ func ShowUserReports(top int, username, period string) {
 
 		// Group by user and calculate stats
 		userStats := make(map[string]struct {
-			TotalCPU      float64
-			TotalMemory   float64
-			TotalProcs    int
-			Count         int
-			LastSeen      time.Time
+			TotalCPU    float64
+			TotalMemory float64
+			TotalProcs  int
+			Count       int
+			LastSeen    time.Time
 		})
 
 		for _, metric := range userMetrics {
@@ -564,11 +521,11 @@ func ShowUserReports(top int, username, period string) {
 
 		// Convert to slice for sorting
 		type UserStat struct {
-			Username    string
-			AvgCPU      float64
-			AvgMemory   float64
-			AvgProcs    float64
-			LastSeen    time.Time
+			Username  string
+			AvgCPU    float64
+			AvgMemory float64
+			AvgProcs  float64
+			LastSeen  time.Time
 		}
 
 		var users []UserStat
@@ -872,94 +829,401 @@ func ResolveAllAlerts() {
 	fmt.Printf("✓ Successfully resolved %d alerts\n", rowsAffected)
 }
 
-// ShowWebSocketStatus displays the current WebSocket server status
-func ShowWebSocketStatus() {
-	manager := websocket.GetManager()
-	status := manager.GetStatus()
+// getPublicIP attempts to get the public IP address
+func getPublicIP() string {
+	// Try multiple services for better reliability
+	services := []string{
+		"https://api.ipify.org",
+		"https://ifconfig.me",
+		"https://icanhazip.com",
+	}
 
-	fmt.Printf("WebSocket Status: ")
-	if running, ok := status["running"].(bool); ok && running {
-		fmt.Printf("🟢 Running\n")
-		if port, ok := status["port"].(int); ok {
-			fmt.Printf("Port: %d\n", port)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	for _, service := range services {
+		resp, err := client.Get(service)
+		if err != nil {
+			continue
 		}
-		if clients, ok := status["clients"].(int); ok {
-			fmt.Printf("Clients: %d\n", clients)
-		}
-		if url, ok := status["connection_url"].(string); ok && url != "" {
-			fmt.Printf("Connection URL: %s\n", url)
-		}
-	} else {
-		fmt.Printf("🔴 Not Running\n")
-		if enabled, ok := status["enabled"].(bool); ok && enabled {
-			if port, ok := status["port"].(int); ok {
-				fmt.Printf("Port: %d (configured)\n", port)
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				continue
 			}
-			fmt.Printf("Status: Daemon not running or WebSocket disabled\n")
-		} else {
-			fmt.Printf("Status: WebSocket not configured\n")
+			ip := strings.TrimSpace(string(body))
+			// Validate IP format
+			if net.ParseIP(ip) != nil {
+				return ip
+			}
 		}
 	}
 
-	// Note: Daemon status check removed for simplicity
-	fmt.Printf("Daemon: Check with 'systemctl status sysmedic'\n")
+	// Fallback to local IP if public IP detection fails
+	return getLocalIP()
 }
 
-// StartWebSocketServer configures and starts the WebSocket server
+// getLocalIP gets the local IP address
+func getLocalIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
+}
+
+// ShowWebSocketStatus displays the current WebSocket server status
+func ShowWebSocketStatus() {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		return
+	}
+
+	status := getWebSocketDaemonStatus()
+
+	fmt.Printf("WebSocket Daemon Status: ")
+	if strings.Contains(status, "running") {
+		fmt.Printf("🟢 %s\n", status)
+
+		// Get public IP for connection URL
+		publicIP := getPublicIP()
+
+		// Display the quick connect URL
+		fmt.Printf("Quick Connect: sysmedic://%s@%s:%d/\n", cfg.WebSocket.Secret, publicIP, cfg.WebSocket.Port)
+		fmt.Printf("Port: %d\n", cfg.WebSocket.Port)
+		fmt.Printf("Secret: %s\n", cfg.WebSocket.Secret)
+
+		// Show both local and public URLs with secret parameter
+		fmt.Printf("Local URL: ws://localhost:%d/ws?secret=%s\n", cfg.WebSocket.Port, cfg.WebSocket.Secret)
+		fmt.Printf("Public URL: ws://%s:%d/ws?secret=%s\n", publicIP, cfg.WebSocket.Port, cfg.WebSocket.Secret)
+	} else {
+		fmt.Printf("🔴 %s\n", status)
+		if cfg.WebSocket.Enabled {
+			fmt.Printf("Port: %d (configured)\n", cfg.WebSocket.Port)
+			fmt.Printf("Start with: sysmedic websocket start\n")
+		} else {
+			fmt.Printf("WebSocket is disabled in configuration\n")
+			fmt.Printf("Enable with: sysmedic config set websocket.enabled true\n")
+		}
+	}
+}
+
+// StartWebSocketServer starts the WebSocket server daemon
 func StartWebSocketServer(port int) {
 	if port < 1 || port > 65535 {
 		fmt.Printf("Error: Invalid port number %d. Must be between 1-65535\n", port)
 		return
 	}
 
-	manager := websocket.GetManager()
-	err := manager.Configure(port, true)
+	// Update configuration with new port
+	cfg, err := config.LoadConfig("")
 	if err != nil {
-		fmt.Printf("Error configuring WebSocket server: %v\n", err)
+		fmt.Printf("Error loading config: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ WebSocket server configured on port %d\n", port)
-	fmt.Printf("  To start the server, restart the daemon:\n")
-	fmt.Printf("  sudo systemctl restart sysmedic\n")
-	fmt.Printf("\n")
-	fmt.Printf("  After restart, check status with:\n")
-	fmt.Printf("  sysmedic websocket status\n")
+	cfg.WebSocket.Port = port
+	cfg.WebSocket.Enabled = true
+	if cfg.WebSocket.Secret == "" {
+		cfg.WebSocket.Secret, _ = config.GenerateSecret()
+	}
+
+	if err := config.SaveConfig(cfg); err != nil {
+		fmt.Printf("Error saving config: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Starting WebSocket daemon on port %d...\n", port)
+	if err := startWebSocketDaemon(); err != nil {
+		fmt.Printf("Error starting WebSocket daemon: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ WebSocket daemon started successfully\n")
+
+	// Get public IP for connection URL
+	publicIP := getPublicIP()
+
+	// Display the quick connect URL
+	fmt.Printf("Quick Connect: sysmedic://%s@%s:%d/\n", cfg.WebSocket.Secret, publicIP, port)
+	fmt.Printf("Local URL: ws://localhost:%d/ws?secret=%s\n", port, cfg.WebSocket.Secret)
+	fmt.Printf("Public URL: ws://%s:%d/ws?secret=%s\n", publicIP, port, cfg.WebSocket.Secret)
 }
 
 // StopWebSocketServer stops and disables the WebSocket server
+// StopWebSocketServer stops the WebSocket server
 func StopWebSocketServer() {
-	manager := websocket.GetManager()
-	err := manager.Configure(0, false)
-	if err != nil {
-		fmt.Printf("Error disabling WebSocket server: %v\n", err)
+	fmt.Printf("Stopping WebSocket daemon...\n")
+	if err := stopWebSocketDaemon(); err != nil {
+		fmt.Printf("Error stopping WebSocket daemon: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ WebSocket server disabled\n")
-	fmt.Printf("  To stop the server, restart the daemon:\n")
-	fmt.Printf("  sudo systemctl restart sysmedic\n")
+	fmt.Printf("✓ WebSocket server stopped\n")
 }
 
-// GenerateNewWebSocketSecret generates a new authentication secret
+// GenerateNewWebSocketSecret generates a new connection secret
 func GenerateNewWebSocketSecret() {
-	manager := websocket.GetManager()
-	status := manager.GetStatus()
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		return
+	}
 
-	if enabled, ok := status["enabled"].(bool); !ok || !enabled {
-		fmt.Printf("Error: WebSocket server is not configured\n")
+	if !cfg.WebSocket.Enabled {
+		fmt.Printf("Error: WebSocket server is not enabled\n")
 		fmt.Printf("Enable it first with: sysmedic websocket start\n")
 		return
 	}
 
-	err := manager.GenerateNewSecret()
+	// Generate new secret
+	newSecret, err := config.GenerateSecret()
 	if err != nil {
 		fmt.Printf("Error generating new secret: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ New WebSocket secret generated\n")
+	cfg.WebSocket.Secret = newSecret
+	if err := config.SaveConfig(cfg); err != nil {
+		fmt.Printf("Error saving config: %v\n", err)
+		return
+	}
+
+	// Restart WebSocket daemon to use new secret
+	if strings.Contains(getWebSocketDaemonStatus(), "running") {
+		fmt.Printf("Restarting WebSocket daemon with new secret...\n")
+		if err := stopWebSocketDaemon(); err != nil {
+			fmt.Printf("Warning: Could not stop WebSocket daemon: %v\n", err)
+		}
+		time.Sleep(2 * time.Second)
+		if err := startWebSocketDaemon(); err != nil {
+			fmt.Printf("Warning: Could not restart WebSocket daemon: %v\n", err)
+		}
+	}
+
+	fmt.Printf("✓ New WebSocket secret generated: %s\n", newSecret)
 	fmt.Printf("  All existing clients will be disconnected\n")
 	fmt.Printf("  Get new connection URL with:\n")
 	fmt.Printf("  sysmedic websocket status\n")
+}
+
+// getDoctorDaemonStatus returns the status of the doctor daemon
+func getDoctorDaemonStatus() string {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return "unknown (config error)"
+	}
+
+	pidFile := fmt.Sprintf("%s/sysmedic.doctor.pid", cfg.DataPath)
+	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
+		return "stopped"
+	}
+
+	// Read PID and check if process is running
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return "unknown (pid error)"
+	}
+
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return "unknown (invalid pid)"
+	}
+
+	if process, err := os.FindProcess(pid); err == nil {
+		if err := process.Signal(syscall.Signal(0)); err == nil {
+			return fmt.Sprintf("running (PID: %d)", pid)
+		}
+	}
+
+	return "stopped"
+}
+
+// getWebSocketDaemonStatus returns the status of the websocket daemon
+func getWebSocketDaemonStatus() string {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return "unknown (config error)"
+	}
+
+	pidFile := fmt.Sprintf("%s/sysmedic.websocket.pid", cfg.DataPath)
+	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
+		return "stopped"
+	}
+
+	// Read PID and check if process is running
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return "unknown (pid error)"
+	}
+
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return "unknown (invalid pid)"
+	}
+
+	if process, err := os.FindProcess(pid); err == nil {
+		if err := process.Signal(syscall.Signal(0)); err == nil {
+			return fmt.Sprintf("running (PID: %d)", pid)
+		}
+	}
+
+	return "stopped"
+}
+
+// startDoctorDaemon starts the doctor daemon as a background process
+func startDoctorDaemon() error {
+	status := getDoctorDaemonStatus()
+	if strings.Contains(status, "running") {
+		fmt.Println("Doctor daemon is already running")
+		return nil
+	}
+
+	// Get the current binary path
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command(execPath, "--doctor-daemon")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true,
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	// Detach from parent process
+	cmd.Process.Release()
+	return nil
+}
+
+// stopDoctorDaemon stops the doctor daemon
+func stopDoctorDaemon() error {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return err
+	}
+
+	pidFile := fmt.Sprintf("%s/sysmedic.doctor.pid", cfg.DataPath)
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Doctor daemon is not running")
+			return nil
+		}
+		return err
+	}
+
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return err
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return err
+	}
+
+	// Wait for process to exit
+	for i := 0; i < 30; i++ {
+		if !strings.Contains(getDoctorDaemonStatus(), "running") {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
+}
+
+// startWebSocketDaemon starts the websocket daemon as a background process
+func startWebSocketDaemon() error {
+	status := getWebSocketDaemonStatus()
+	if strings.Contains(status, "running") {
+		fmt.Println("WebSocket daemon is already running")
+		return nil
+	}
+
+	// Get the current binary path
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command(execPath, "--websocket-daemon")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true,
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	// Detach from parent process
+	cmd.Process.Release()
+	return nil
+}
+
+// stopWebSocketDaemon stops the websocket daemon
+func stopWebSocketDaemon() error {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return err
+	}
+
+	pidFile := fmt.Sprintf("%s/sysmedic.websocket.pid", cfg.DataPath)
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("WebSocket daemon is not running")
+			return nil
+		}
+		return err
+	}
+
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return err
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return err
+	}
+
+	// Wait for process to exit
+	for i := 0; i < 30; i++ {
+		if !strings.Contains(getWebSocketDaemonStatus(), "running") {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
 }

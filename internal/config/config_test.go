@@ -115,7 +115,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	}
 
 	// Save config
-	err = SaveConfig(config, configPath)
+	err = SaveConfigToPath(config, configPath)
 	if err != nil {
 		t.Fatalf("Failed to save config: %v", err)
 	}
@@ -170,11 +170,11 @@ func TestGetUserThreshold(t *testing.T) {
 		metric   string
 		expected int
 	}{
-		{"normaluser", "cpu", 80},     // Default
-		{"normaluser", "memory", 75},  // Default
-		{"poweruser", "cpu", 95},      // Custom
-		{"poweruser", "memory", 90},   // Custom
-		{"unknown", "unknown", 80},    // Fallback
+		{"normaluser", "cpu", 80},    // Default
+		{"normaluser", "memory", 75}, // Default
+		{"poweruser", "cpu", 95},     // Custom
+		{"poweruser", "memory", 90},  // Custom
+		{"unknown", "unknown", 80},   // Fallback
 	}
 
 	for _, test := range tests {
@@ -240,9 +240,9 @@ func TestSetSystemThreshold(t *testing.T) {
 	config := GetDefaultConfig()
 
 	tests := []struct {
-		metric   string
-		value    int
-		checkFn  func() int
+		metric  string
+		value   int
+		checkFn func() int
 	}{
 		{
 			"cpu-threshold", 85,

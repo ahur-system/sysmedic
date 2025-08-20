@@ -1,30 +1,34 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 // Config represents the main configuration structure
 type Config struct {
-	Monitoring MonitoringConfig `yaml:"monitoring"`
-	Users      UsersConfig      `yaml:"users"`
-	Reporting  ReportingConfig  `yaml:"reporting"`
-	Email      EmailConfig      `yaml:"email"`
+	Monitoring     MonitoringConfig         `yaml:"monitoring"`
+	Users          UsersConfig              `yaml:"users"`
+	Reporting      ReportingConfig          `yaml:"reporting"`
+	Email          EmailConfig              `yaml:"email"`
+	WebSocket      WebSocketConfig          `yaml:"websocket"`
 	UserThresholds map[string]UserThreshold `yaml:"user_thresholds"`
-	UserFiltering UserFilteringConfig `yaml:"user_filtering"`
+	UserFiltering  UserFilteringConfig      `yaml:"user_filtering"`
+	DataPath       string                   `yaml:"data_path"`
 }
 
 // MonitoringConfig contains system-wide monitoring settings
 type MonitoringConfig struct {
-	CheckInterval    int `yaml:"check_interval"`    // seconds
-	CPUThreshold     int `yaml:"cpu_threshold"`     // system-wide %
-	MemoryThreshold  int `yaml:"memory_threshold"`  // system-wide %
-	PersistentTime   int `yaml:"persistent_time"`   // minutes for persistent detection
+	CheckInterval   int `yaml:"check_interval"`   // seconds
+	CPUThreshold    int `yaml:"cpu_threshold"`    // system-wide %
+	MemoryThreshold int `yaml:"memory_threshold"` // system-wide %
+	PersistentTime  int `yaml:"persistent_time"`  // minutes for persistent detection
 }
 
 // UsersConfig contains default user monitoring settings
@@ -36,13 +40,13 @@ type UsersConfig struct {
 
 // UserFilteringConfig contains settings for filtering which users to track
 type UserFilteringConfig struct {
-	MinUIDForRealUsers  int      `yaml:"min_uid_for_real_users"`  // minimum UID to consider real user (default: 1000)
-	IgnoreSystemUsers   bool     `yaml:"ignore_system_users"`     // skip common system users (default: true)
-	MinCPUPercent      float64  `yaml:"min_cpu_percent"`         // minimum CPU % to track user (default: 5.0)
-	MinMemoryPercent   float64  `yaml:"min_memory_percent"`      // minimum memory % to track user (default: 5.0)
-	MinProcessCount    int      `yaml:"min_process_count"`       // minimum processes to track single-process users (default: 1)
-	ExcludedUsers      []string `yaml:"excluded_users"`          // specific usernames to never track
-	IncludedUsers      []string `yaml:"included_users"`          // specific usernames to always track
+	MinUIDForRealUsers int      `yaml:"min_uid_for_real_users"` // minimum UID to consider real user (default: 1000)
+	IgnoreSystemUsers  bool     `yaml:"ignore_system_users"`    // skip common system users (default: true)
+	MinCPUPercent      float64  `yaml:"min_cpu_percent"`        // minimum CPU % to track user (default: 5.0)
+	MinMemoryPercent   float64  `yaml:"min_memory_percent"`     // minimum memory % to track user (default: 5.0)
+	MinProcessCount    int      `yaml:"min_process_count"`      // minimum processes to track single-process users (default: 1)
+	ExcludedUsers      []string `yaml:"excluded_users"`         // specific usernames to never track
+	IncludedUsers      []string `yaml:"included_users"`         // specific usernames to always track
 }
 
 // ReportingConfig contains reporting and data retention settings
@@ -64,6 +68,13 @@ type EmailConfig struct {
 }
 
 // UserThreshold contains per-user custom thresholds
+type WebSocketConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Port           int    `yaml:"port"`
+	Secret         string `yaml:"secret"`
+	UpdateInterval int    `yaml:"update_interval"` // Update interval in seconds for system data
+}
+
 type UserThreshold struct {
 	CPUThreshold    int `yaml:"cpu_threshold"`
 	MemoryThreshold int `yaml:"memory_threshold"`
@@ -93,11 +104,11 @@ func GetDefaultConfig() *Config {
 		UserFiltering: UserFilteringConfig{
 			MinUIDForRealUsers: 1000,
 			IgnoreSystemUsers:  true,
-			MinCPUPercent:     5.0,
-			MinMemoryPercent:  5.0,
-			MinProcessCount:   1,
-			ExcludedUsers:     []string{"root", "daemon", "sshd", "systemd-network"},
-			IncludedUsers:     []string{}, // empty by default
+			MinCPUPercent:      5.0,
+			MinMemoryPercent:   5.0,
+			MinProcessCount:    1,
+			ExcludedUsers:      []string{"root", "daemon", "sshd", "systemd-network"},
+			IncludedUsers:      []string{}, // empty by default
 		},
 		Reporting: ReportingConfig{
 			Period:     "hourly",
@@ -109,7 +120,12 @@ func GetDefaultConfig() *Config {
 			SMTPPort: 587,
 			TLS:      true,
 		},
+		WebSocket: WebSocketConfig{
+			Enabled: true,
+			Port:    8060,
+		},
 		UserThresholds: make(map[string]UserThreshold),
+		DataPath:       DefaultDataPath,
 	}
 }
 
@@ -137,8 +153,13 @@ func LoadConfig(configPath string) (*Config, error) {
 	return config, nil
 }
 
-// SaveConfig saves configuration to file
-func SaveConfig(config *Config, configPath string) error {
+// SaveConfig saves configuration to the default path
+func SaveConfig(config *Config) error {
+	return SaveConfigToPath(config, "")
+}
+
+// SaveConfigToPath saves configuration to the specified path
+func SaveConfigToPath(config *Config, configPath string) error {
 	if configPath == "" {
 		configPath = DefaultConfigPath
 	}
@@ -159,6 +180,16 @@ func SaveConfig(config *Config, configPath string) error {
 	}
 
 	return nil
+}
+
+// GenerateSecret generates a random secret for WebSocket authentication
+func GenerateSecret() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based secret
+		return fmt.Sprintf("sysmedic_%d", time.Now().Unix()), nil
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 // GetUserThreshold returns the threshold for a specific user or default
