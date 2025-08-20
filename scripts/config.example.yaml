@@ -80,6 +80,13 @@ user_filtering:
         - "developer"
         - "poweruser"
         # Add usernames you always want to monitor
+
+# WebSocket server settings for remote monitoring
+websocket:
+    enabled: true # Enable WebSocket server by default
+    port: 8060 # Port for WebSocket connections
+    # Note: Secret is auto-generated on first start
+    # Use 'sysmedic websocket secret' to regenerate if needed
 # Configuration Examples:
 #
 # Low-resource server (adjust thresholds):

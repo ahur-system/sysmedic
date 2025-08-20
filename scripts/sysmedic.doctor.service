@@ -1,5 +1,5 @@
 [Unit]
-Description=SysMedic System Monitoring Daemon
+Description=SysMedic Doctor - System Monitoring Daemon
 Documentation=https://github.com/sysmedic/sysmedic
 After=network.target
 Wants=network.target
@@ -8,10 +8,9 @@ Wants=network.target
 Type=simple
 User=root
 Group=root
-ExecStart=/usr/local/bin/sysmedic daemon start
+ExecStart=/usr/local/bin/sysmedic --doctor-daemon
 ExecReload=/bin/kill -HUP $MAINPID
-ExecStop=/usr/local/bin/sysmedic daemon stop
-PIDFile=/var/run/sysmedic.pid
+PIDFile=/var/lib/sysmedic/sysmedic.doctor.pid
 Restart=on-failure
 RestartSec=5
 StartLimitInterval=60
@@ -46,7 +45,7 @@ Environment=SYSMEDIC_DATA=/var/lib/sysmedic
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=sysmedic
+SyslogIdentifier=sysmedic.doctor
 
 [Install]
 WantedBy=multi-user.target
