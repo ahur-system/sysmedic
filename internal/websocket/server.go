@@ -18,6 +18,7 @@ import (
 	"github.com/ahur-system/sysmedic/internal/config"
 	"github.com/ahur-system/sysmedic/internal/monitor"
 	"github.com/gorilla/websocket"
+	"gopkg.in/yaml.v2"
 )
 
 var upgrader = websocket.Upgrader{
@@ -202,6 +203,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send configuration as YAML after welcome message
+	if err := s.sendConfigYAML(conn); err != nil {
+		log.Printf("Error sending config YAML: %v", err)
+		return
+	}
+
 	// Create channels for coordination
 	done := make(chan struct{})
 
@@ -374,6 +381,34 @@ func (s *Server) sendConfig(conn *websocket.Conn, requestID string) {
 		RequestID: requestID,
 	}
 	conn.WriteJSON(response)
+}
+
+// sendConfigYAML sends the current configuration as YAML data
+func (s *Server) sendConfigYAML(conn *websocket.Conn) error {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	// Convert config to YAML
+	yamlData, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to YAML: %v", err)
+	}
+
+	// Send config message
+	configMessage := map[string]interface{}{
+		"type":      "config",
+		"data":      string(yamlData),
+		"timestamp": time.Now().Format("2006-01-02T15:04:05Z"),
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(writeWait))
+	if err := conn.WriteJSON(configMessage); err != nil {
+		return fmt.Errorf("failed to send config message: %v", err)
+	}
+
+	return nil
 }
 
 func (s *Server) sendUptime(conn *websocket.Conn, requestID string) {

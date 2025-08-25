@@ -20,6 +20,7 @@ import (
 
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"gopkg.in/yaml.v2"
 	"net/http"
 	"strings"
 )
@@ -474,6 +475,12 @@ func (ws *WebSocketDaemon) handleWebSocket(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Send configuration as YAML after welcome message
+	if err := ws.sendConfigMessage(conn); err != nil {
+		log.Printf("Failed to send config message: %v", err)
+		return
+	}
+
 	// Set up periodic data sending with configurable interval
 	dataTicker := time.NewTicker(ws.updateInterval)
 	defer dataTicker.Stop()
@@ -847,4 +854,27 @@ func (ws *WebSocketDaemon) handleStatus(w http.ResponseWriter, r *http.Request) 
 func (ws *WebSocketDaemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+// sendConfigMessage sends the current configuration as YAML data
+func (ws *WebSocketDaemon) sendConfigMessage(conn *websocket.Conn) error {
+	// Convert config to YAML
+	yamlData, err := yaml.Marshal(ws.config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to YAML: %v", err)
+	}
+
+	// Send config message
+	configMessage := map[string]interface{}{
+		"type":      "config",
+		"data":      string(yamlData),
+		"timestamp": time.Now().Format("2006-01-02T15:04:05Z"),
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(writeWait))
+	if err := conn.WriteJSON(configMessage); err != nil {
+		return fmt.Errorf("failed to send config message: %v", err)
+	}
+
+	return nil
 }
