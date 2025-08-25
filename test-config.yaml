@@ -1,0 +1,73 @@
+# SysMedic Test Configuration
+# Used for testing WebSocket config message functionality
+
+# System monitoring settings
+monitoring:
+    check_interval: 30 # How often to check system metrics (seconds)
+    cpu_threshold: 75 # System-wide CPU threshold (%)
+    memory_threshold: 80 # System-wide memory threshold (%)
+    persistent_time: 45 # Minutes before flagging persistent usage
+
+# Default user monitoring settings
+users:
+    cpu_threshold: 70 # Default per-user CPU threshold (%)
+    memory_threshold: 75 # Default per-user memory threshold (%)
+    persistent_time: 60 # Minutes before flagging user as persistent
+
+# Reporting and data retention
+reporting:
+    period: "hourly" # Default report period (hourly/daily/weekly)
+    retain_days: 7 # Days to keep historical data
+
+# Email notification settings
+email:
+    enabled: false # Enable/disable email alerts
+    smtp_host: "smtp.test.com" # SMTP server hostname
+    smtp_port: 587 # SMTP server port
+    username: "test@example.com" # SMTP username
+    password: "test_password" # SMTP password
+    from: "sysmedic-test@example.com" # From address
+    to: "admin-test@example.com" # Alert recipient
+    tls: true # Use TLS encryption
+
+# WebSocket server settings
+websocket:
+    enabled: true # Enable WebSocket server
+    port: 8060 # Port for WebSocket connections
+    secret: "test_secret" # Test secret for authentication
+    update_interval: 3 # Update interval in seconds
+
+# Per-user custom thresholds for testing
+user_thresholds:
+    test_user:
+        cpu_threshold: 85 # Higher CPU tolerance for test user
+        memory_threshold: 90 # Higher memory tolerance
+        persistent_time: 30 # Shorter time before flagging
+
+    service_user:
+        cpu_threshold: 60 # Stricter limits for service user
+        memory_threshold: 65
+        persistent_time: 15
+
+# User filtering settings
+user_filtering:
+    min_uid_for_real_users: 1000 # Minimum UID to consider real users
+    ignore_system_users: true # Skip system users
+    min_cpu_percent: 3.0 # Lower threshold for testing
+    min_memory_percent: 3.0 # Lower threshold for testing
+    min_process_count: 1 # Minimum processes to track
+
+    # Users to exclude from monitoring
+    excluded_users:
+        - "root"
+        - "daemon"
+        - "systemd-network"
+        - "sshd"
+
+    # Users to always include in monitoring
+    included_users:
+        - "test_user"
+        - "developer"
+
+# Data storage path
+data_path: "/tmp/sysmedic-test"
