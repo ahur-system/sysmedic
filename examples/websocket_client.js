@@ -94,6 +94,11 @@ class SysMedicClient {
                     console.log("Daemon:", data.data.daemon);
                     break;
 
+                case "config":
+                    console.log("📋 Configuration received:");
+                    console.log(data.data);
+                    break;
+
                 case "system_update":
                     console.log("System update received:", data.data);
                     console.log(
@@ -352,6 +357,9 @@ function handleServerMessage(data) {
         case "welcome":
             displayWelcomeInfo(data.data);
             break;
+        case "config":
+            displayConfig(data.data);
+            break;
     }
 }
 
@@ -381,6 +389,15 @@ function displayWelcomeInfo(info) {
     updateElement("server-version", info.version || "Unknown");
     updateElement("server-uptime", info.system || "Unknown");
     updateConnectionStatus(`Connected (${info.status || "Unknown"})`);
+}
+
+function displayConfig(configData) {
+    console.log("📋 Configuration data:", configData);
+    // Display config in a formatted way if there's a UI element for it
+    const configElement = document.getElementById("config-display");
+    if (configElement) {
+        configElement.textContent = configData;
+    }
 }
 
 function updateElement(id, value) {

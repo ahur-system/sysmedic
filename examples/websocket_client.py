@@ -130,6 +130,46 @@ class SysMedicClient:
                 logger.info(f"Status: {welcome_data.get('status', 'Unknown')}")
                 logger.info(f"Daemon: {welcome_data.get('daemon', 'Unknown')}")
 
+            elif msg_type == 'config':
+                config_data = data.get('data', '')
+                logger.info("📋 Configuration received:")
+                logger.info(f"Config data length: {len(config_data)} characters")
+
+                # Try to parse and display key configuration values
+                try:
+                    import yaml
+                    config_parsed = yaml.safe_load(config_data)
+                    if isinstance(config_parsed, dict):
+                        logger.info("✅ Configuration is valid YAML")
+
+                        # Display key monitoring settings
+                        if 'monitoring' in config_parsed:
+                            monitoring = config_parsed['monitoring']
+                            logger.info(f"🔧 Monitoring Settings:")
+                            logger.info(f"   CPU Threshold: {monitoring.get('cpu_threshold', 'N/A')}%")
+                            logger.info(f"   Memory Threshold: {monitoring.get('memory_threshold', 'N/A')}%")
+                            logger.info(f"   Check Interval: {monitoring.get('check_interval', 'N/A')}s")
+
+                        # Display WebSocket settings
+                        if 'websocket' in config_parsed:
+                            websocket_config = config_parsed['websocket']
+                            logger.info(f"🌐 WebSocket Settings:")
+                            logger.info(f"   Port: {websocket_config.get('port', 'N/A')}")
+                            logger.info(f"   Enabled: {websocket_config.get('enabled', 'N/A')}")
+
+                        # Display user thresholds if any
+                        if 'user_thresholds' in config_parsed and config_parsed['user_thresholds']:
+                            logger.info(f"👥 Custom User Thresholds: {len(config_parsed['user_thresholds'])} users configured")
+                    else:
+                        logger.warning("❌ Config data is not a valid dictionary")
+
+                except ImportError:
+                    logger.warning("⚠️  PyYAML not available, displaying raw config")
+                    logger.info(f"Raw config (first 300 chars): {config_data[:300]}...")
+                except Exception as e:
+                    logger.error(f"❌ Failed to parse config YAML: {e}")
+                    logger.info(f"Raw config (first 300 chars): {config_data[:300]}...")
+
             elif msg_type == 'system_update':
                 self.metrics = data.get('data', {})
                 self._log_metrics()
