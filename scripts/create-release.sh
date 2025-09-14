@@ -35,51 +35,264 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Release notes - simplified to avoid bash parsing issues
-RELEASE_NOTES="SysMedic v${VERSION} - Arch Linux Package Support
+# Release notes
+RELEASE_NOTES="# SysMedic v${VERSION} - Arch Linux Package Support
 
-MAJOR PACKAGING IMPROVEMENT: Complete Arch Linux Support
+## 🎯 MAJOR PACKAGING IMPROVEMENT: Complete Arch Linux Support
 
-This release introduces comprehensive Arch Linux package support with proper pkg.tar.zst format, making SysMedic available across all major Linux distributions with native package managers.
+This release introduces comprehensive Arch Linux package support with proper \`.pkg.tar.zst\` format, making SysMedic available across all major Linux distributions with native package managers.
 
-Key Improvements:
-- Arch Linux Support: Proper pkg.tar.zst packages with zstd compression
-- Standards Compliance: Follows official Arch Linux packaging guidelines
-- Package Metadata: Complete PKGINFO and MTREE files for integrity
-- Optimal Compression: zstd ultra-20 compression for smaller downloads
-- Release Integration: Arch packages automatically included in GitHub releases
+## ✨ Key Improvements
 
-What's New:
-- Arch Package Format: sysmedic-1.0.6-1-x86_64.pkg.tar.zst (~4.1MB)
-- User-Friendly Downloads: sysmedic-arch.pkg.tar.zst for easy access
-- Package Validation: Comprehensive testing script for format verification
-- Installation Methods: Multiple installation options including AUR support
-- Complete Documentation: Installation, upgrade, and uninstallation guides
+- **Arch Linux Support**: Proper \`.pkg.tar.zst\` packages with zstd compression
+- **Standards Compliance**: Follows official Arch Linux packaging guidelines
+- **Package Metadata**: Complete \`.PKGINFO\` and \`.MTREE\` files for integrity
+- **Optimal Compression**: zstd ultra-20 compression for smaller downloads
+- **Release Integration**: Arch packages automatically included in GitHub releases
 
-Package Distribution:
-- Debian/Ubuntu: deb packages with apt integration
-- RHEL/CentOS/Fedora: rpm packages with yum/dnf support
-- Arch Linux: pkg.tar.zst packages with pacman support
-- Generic Linux: tar.gz archives for manual installation
-- Checksums: SHA256SUMS for all packages
+## 🔧 What's New
 
-Installation:
+- **Arch Package Format**: \`sysmedic-1.0.6-1-x86_64.pkg.tar.zst\` (~4.1MB)
+- **User-Friendly Downloads**: \`sysmedic-arch.pkg.tar.zst\` for easy access
+- **Package Validation**: Comprehensive testing script for format verification
+- **Installation Methods**: Multiple installation options including AUR support
+- **Complete Documentation**: Installation, upgrade, and uninstallation guides
 
-Ubuntu/Debian:
+## 📦 Package Distribution
+
+- **Debian/Ubuntu**: \`.deb\` packages with apt integration
+- **RHEL/CentOS/Fedora**: \`.rpm\` packages with yum/dnf support
+- **Arch Linux**: \`.pkg.tar.zst\` packages with pacman support
+- **Generic Linux**: \`.tar.gz\` archives for manual installation
+- **Checksums**: SHA256SUMS for all packages
+
+## 🚀 Enhanced Features (Single Binary Multi-Daemon Architecture)
+
+- **Single Binary**: One 11MB binary with multiple daemon modes
+- **Independent Daemons**: Doctor (monitoring) and WebSocket (remote access)
+- **Smart User Filtering**: Focus on real users causing actual problems
+- **Real Usernames**: Proper username display instead of uid_[id] format
+- **Configurable Monitoring**: Control intervals, thresholds, and filtering
+- **SystemD Integration**: Separate services using same binary
+
+## ✨ Features
+
+- 📊 **Real-time Monitoring**: CPU, memory, disk, and network monitoring
+- 🔍 **System Diagnostics**: Advanced health checks and performance analysis
+- 📈 **Historical Data**: Data collection and trend analysis
+- 🌐 **Web Dashboard**: Interactive web-based interface
+- 🔌 **REST API**: Programmatic access to system metrics
+- ⚙️ **Configurable**: Customizable monitoring intervals and thresholds
+- 🔧 **SystemD Integration**: Native Linux service support
+- 🚨 **Smart Alerts**: Configurable alerting for system issues
+
+## 📦 Installation
+
+### Ubuntu/Debian (.deb)
+\`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb
 sudo dpkg -i sysmedic-amd64.deb
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+sudo systemctl start sysmedic.doctor sysmedic.websocket
+\`\`\`
 
-RHEL/CentOS/Fedora:
+### RHEL/CentOS/Fedora (.rpm)
+\`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
 sudo rpm -i sysmedic-x86_64.rpm
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+sudo systemctl start sysmedic.doctor sysmedic.websocket
+\`\`\`
 
-Arch Linux:
+### Arch Linux (.pkg.tar.zst)
+\`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst
 sudo pacman -U sysmedic-arch.pkg.tar.zst
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+sudo systemctl start sysmedic.doctor sysmedic.websocket
+\`\`\`
 
-All packages include systemd service integration for both doctor (monitoring) and websocket (remote access) daemons.
+### Generic Linux (tarball)
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-v${VERSION}-linux-amd64.tar.gz
+tar xzf sysmedic-v${VERSION}-linux-amd64.tar.gz
+cd sysmedic-v${VERSION}-linux-amd64
+sudo ./scripts/install.sh
+\`\`\`
 
-Full documentation available at: https://github.com/ahur-system/sysmedic"
+## 🚀 Quick Start
+
+After installation, manage SysMedic daemons:
+
+### Daemon Management
+\`\`\`bash
+# Start monitoring daemon
+sysmedic daemon start
+
+# Start WebSocket daemon for remote access
+sysmedic websocket start
+
+# Check status of both daemons
+sysmedic daemon status
+
+# WebSocket server available at:
+# ws://localhost:8060/ws
+\`\`\`
+
+### Configuration
+
+Edit the configuration file:
+\`\`\`bash
+sudo nano /etc/sysmedic/config.yaml
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
+\`\`\`
+
+### View Logs
+\`\`\`bash
+# Monitor doctor daemon logs
+sudo journalctl -u sysmedic.doctor -f
+
+# Monitor WebSocket daemon logs
+sudo journalctl -u sysmedic.websocket -f
+\`\`\`
+
+## 📋 System Requirements
+
+- **OS**: Linux (Ubuntu 18.04+, RHEL 7+, CentOS 7+, Debian 9+, Arch Linux)
+- **Architecture**: x86_64 (AMD64)
+- **Memory**: 64MB RAM minimum
+- **Disk**: 100MB free space
+- **Network**: Port 8060 for WebSocket (configurable)
+
+## 🔒 Security
+
+- Runs as dedicated \`sysmedic\` user
+- Minimal privileges and secure defaults
+- No root access required for normal operation
+- Configurable TLS encryption
+
+## 📚 Documentation
+
+- [Installation Guide](https://github.com/ahur-system/sysmedic#installation)
+- [Configuration Reference](https://github.com/ahur-system/sysmedic/blob/main/docs/configuration.md)
+- [API Documentation](https://github.com/ahur-system/sysmedic/blob/main/docs/api.md)
+- [Troubleshooting](https://github.com/ahur-system/sysmedic/blob/main/docs/troubleshooting.md)
+
+## 🛠️ What's Included
+
+### Package Assets
+- \`sysmedic-amd64.deb\` - Debian/Ubuntu package
+- \`sysmedic-x86_64.rpm\` - RHEL/CentOS/Fedora package
+- \`sysmedic-arch.pkg.tar.zst\` - Arch Linux package
+- \`sysmedic-v${VERSION}-linux-amd64.tar.gz\` - Generic tarball
+- \`SHA256SUMS\` - Checksums for verification
+
+### Binary Features
+- Single binary with multiple daemon modes (11MB)
+- Built with Go for optimal performance
+- Independent daemon processes for monitoring and WebSocket
+- Complete process separation and isolation
+- Production-ready with extensive testing
+
+## 🔄 Upgrading
+
+To upgrade from a previous version:
+
+### Debian/Ubuntu
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb
+sudo dpkg -i sysmedic-amd64.deb
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
+\`\`\`
+
+### RHEL/CentOS
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm
+sudo rpm -U sysmedic-x86_64.rpm
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
+\`\`\`
+
+### Arch Linux
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst
+sudo pacman -U sysmedic-arch.pkg.tar.zst
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
+\`\`\`
+
+## 🗑️ Uninstallation
+
+### Debian/Ubuntu
+\`\`\`bash
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
+sudo dpkg -r sysmedic
+\`\`\`
+
+### RHEL/CentOS
+\`\`\`bash
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
+sudo rpm -e sysmedic
+\`\`\`
+
+### Arch Linux
+\`\`\`bash
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
+sudo pacman -R sysmedic
+\`\`\`
+
+## 🐛 Issues & Support
+
+If you encounter any issues:
+
+1. Check the [troubleshooting guide](https://github.com/ahur-system/sysmedic/blob/main/docs/troubleshooting.md)
+2. View logs: \`sudo journalctl -u sysmedic.doctor -f\` or \`sudo journalctl -u sysmedic.websocket -f\`
+3. Check daemon status: \`sysmedic daemon status\`
+4. [Open an issue](https://github.com/ahur-system/sysmedic/issues/new)
+
+## 📝 Changelog
+
+### v${VERSION} (Arch Linux Package Support)
+- 📦 **MAJOR**: Complete Arch Linux package support with \`.pkg.tar.zst\` format
+- 🔧 **NEW**: Proper package metadata (\`.PKGINFO\`, \`.MTREE\`) and zstd compression
+- 🚀 **ENHANCED**: Multi-distribution support (DEB, RPM, Arch, Generic)
+- 📋 **IMPROVED**: Comprehensive installation documentation for all platforms
+- ✅ **ADDED**: Package validation and testing infrastructure
+- 🌐 **EXPANDED**: Release automation includes all package formats
+
+### v1.0.5 (Single Binary Multi-Daemon Architecture)
+- 🏗️ **MAJOR**: Single binary with multiple daemon modes
+- 🔄 **NEW**: Independent doctor and WebSocket daemon processes
+- 📦 **SIMPLIFIED**: One binary (11MB) handles all functionality
+- 🎯 **ENHANCED**: Complete process separation and isolation
+- ⚙️ **IMPROVED**: Better resource management and fault tolerance
+- 🚀 **ADDED**: Independent daemon lifecycle management
+
+### v1.0.1 (Critical Fix)
+- 🚨 **CRITICAL FIX**: Replaced go-sqlite3 with pure Go SQLite driver
+- 🔧 **FIXED**: \"CGO_ENABLED=0\" runtime error on all Linux distributions
+- ✅ **VERIFIED**: Now works on AlmaLinux, RHEL, CentOS, Ubuntu, Debian, and more
+- 📦 **IMPROVED**: True static compilation without CGO dependencies
+- 🛡️ **ENHANCED**: Better portability and deployment reliability
+
+### v1.0.0 (Initial Release)
+- ✨ Initial public release
+- 📊 Real-time system monitoring
+- 🌐 Web dashboard interface
+- 🔌 REST API for integration
+- 📦 Native .deb and .rpm packages
+- 🔧 SystemD service integration
+- ⚙️ Comprehensive configuration options
+- 🚨 Configurable alerting system
+
+---
+
+**Full Changelog**: https://github.com/ahur-system/sysmedic/commits/v${VERSION}"
 
 # Check if we're in the right directory
 check_directory() {
