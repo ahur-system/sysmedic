@@ -1,5 +1,5 @@
 Name:           sysmedic
-Version:        1.0.5
+Version:        1.0.6
 Release:        1%{?dist}
 Summary:        Single binary multi-daemon Linux system monitoring tool
 License:        MIT

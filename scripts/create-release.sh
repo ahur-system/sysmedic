@@ -7,9 +7,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.5"
+VERSION="1.0.6"
 TAG="v${VERSION}"
-RELEASE_TITLE="SysMedic v${VERSION} - Single Binary Multi-Daemon Architecture"
+RELEASE_TITLE="SysMedic v${VERSION} - Arch Linux Package Support"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,38 +36,40 @@ print_error() {
 }
 
 # Release notes
-RELEASE_NOTES="# SysMedic v${VERSION} - Single Binary Multi-Daemon Architecture
+RELEASE_NOTES="# SysMedic v${VERSION} - Arch Linux Package Support
 
-## 🎯 MAJOR ARCHITECTURAL IMPROVEMENT: Single Binary Multi-Daemon
+## 🎯 MAJOR PACKAGING IMPROVEMENT: Complete Arch Linux Support
 
-This release introduces a revolutionary architecture change - SysMedic now uses a single binary that can operate as multiple independent daemon processes, providing the best of both worlds: simplicity and modularity.
+This release introduces comprehensive Arch Linux package support with proper `.pkg.tar.zst` format, making SysMedic available across all major Linux distributions with native package managers.
 
 ### ✨ Key Improvements
-- **Single Binary**: One 11MB binary handles all functionality (CLI + all daemon modes)
-- **Independent Daemons**: Doctor (monitoring) and WebSocket (remote access) run as separate processes
-- **Complete Separation**: WebSocket daemon runs independently of monitoring daemon
-- **Easy Management**: Single binary controls both daemon processes
-- **Better Resource Isolation**: Each daemon process has its own lifecycle and PID
+- **Arch Linux Support**: Proper `.pkg.tar.zst` packages with zstd compression
+- **Standards Compliance**: Follows official Arch Linux packaging guidelines
+- **Package Metadata**: Complete `.PKGINFO` and `.MTREE` files for integrity
+- **Optimal Compression**: zstd ultra-20 compression for smaller downloads
+- **Release Integration**: Arch packages automatically included in GitHub releases
 
 ### 🔧 What's New
-- **Doctor Daemon Mode**: \`sysmedic --doctor-daemon\` for system monitoring
-- **WebSocket Daemon Mode**: \`sysmedic --websocket-daemon\` for remote access
-- **Process Independence**: Start/stop/restart daemons independently
-- **Simplified Deployment**: One binary, multiple operating modes
-- **Enhanced SystemD Integration**: Separate services using same binary
+- **Arch Package Format**: \`sysmedic-1.0.6-1-x86_64.pkg.tar.zst\` (~4.1MB)
+- **User-Friendly Downloads**: \`sysmedic-arch.pkg.tar.zst\` for easy access
+- **Package Validation**: Comprehensive testing script for format verification
+- **Installation Methods**: Multiple installation options including AUR support
+- **Complete Documentation**: Installation, upgrade, and uninstallation guides
 
-### 📦 Architecture Changes
-- Single binary with multiple execution modes
-- Independent PID files for each daemon process
-- Separate SystemD service files for each daemon
-- Clean process separation with no inter-daemon dependencies
-- Background process spawning and management
+### 📦 Package Distribution
+- **Debian/Ubuntu**: `.deb` packages with apt integration
+- **RHEL/CentOS/Fedora**: `.rpm` packages with yum/dnf support
+- **Arch Linux**: `.pkg.tar.zst` packages with pacman support
+- **Generic Linux**: `.tar.gz` archives for manual installation
+- **Checksums**: SHA256SUMS for all packages
 
-### 🚀 Previous Features (Enhanced User Monitoring)
+### 🚀 Enhanced Features (Single Binary Multi-Daemon Architecture)
+- **Single Binary**: One 11MB binary with multiple daemon modes
+- **Independent Daemons**: Doctor (monitoring) and WebSocket (remote access)
 - **Smart User Filtering**: Focus on real users causing actual problems
 - **Real Usernames**: Proper username display instead of uid_[id] format
-- **Configurable Filtering**: Control which users to monitor or ignore
-- **Problem Focus**: Only track users with significant resource usage
+- **Configurable Monitoring**: Control intervals, thresholds, and filtering
+- **SystemD Integration**: Separate services using same binary
 
 ## ✨ Features (unchanged)
 
@@ -257,7 +259,15 @@ If you encounter any issues:
 
 ## 📝 Changelog
 
-### v${VERSION} (Single Binary Multi-Daemon Architecture)
+### v${VERSION} (Arch Linux Package Support)
+- 📦 **MAJOR**: Complete Arch Linux package support with .pkg.tar.zst format
+- 🔧 **NEW**: Proper package metadata (.PKGINFO, .MTREE) and zstd compression
+- 🚀 **ENHANCED**: Multi-distribution support (DEB, RPM, Arch, Generic)
+- 📋 **IMPROVED**: Comprehensive installation documentation for all platforms
+- ✅ **ADDED**: Package validation and testing infrastructure
+- 🌐 **EXPANDED**: Release automation includes all package formats
+
+### v1.0.5 (Single Binary Multi-Daemon Architecture)
 - 🏗️ **MAJOR**: Single binary with multiple daemon modes
 - 🔄 **NEW**: Independent doctor and WebSocket daemon processes
 - 📦 **SIMPLIFIED**: One binary (11MB) handles all functionality

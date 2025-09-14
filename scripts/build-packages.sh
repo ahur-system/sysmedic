@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION="1.0.5"
+VERSION="1.0.6"
 ARCH="amd64"
 RPM_ARCH="x86_64"
 
@@ -270,7 +270,7 @@ build_arch() {
         print_status "Building Arch package with makepkg..."
 
         # Update PKGBUILD with correct version
-        sed -i "s/pkgver=1.0.5/pkgver=$VERSION/" PKGBUILD
+        sed -i "s/pkgver=[0-9]\+\.[0-9]\+\.[0-9]\+/pkgver=$VERSION/" PKGBUILD
 
         # Set compression to zstd for proper .pkg.tar.zst creation
         export PKGEXT='.pkg.tar.zst'

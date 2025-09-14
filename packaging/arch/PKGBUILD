@@ -1,6 +1,6 @@
 # Maintainer: SysMedic Team <team@sysmedic.dev>
 pkgname=sysmedic
-pkgver=1.0.5
+pkgver=1.0.6
 pkgrel=1
 pkgdesc="Single binary multi-daemon Linux system monitoring tool with user-centric resource tracking"
 arch=('x86_64' 'aarch64')
