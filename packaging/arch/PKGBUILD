@@ -1,0 +1,50 @@
+# Maintainer: SysMedic Team <team@sysmedic.dev>
+pkgname=sysmedic
+pkgver=1.0.5
+pkgrel=1
+pkgdesc="Single binary multi-daemon Linux system monitoring tool with user-centric resource tracking"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ahur-system/sysmedic"
+license=('MIT')
+depends=('systemd')
+makedepends=('go' 'git')
+backup=('etc/sysmedic/config.yaml')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/ahur-system/sysmedic/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # Update with actual checksums
+
+# Set package compression format
+PKGEXT='.pkg.tar.zst'
+COMPRESSZST=(zstd -c -T0 --ultra -20 -)
+
+build() {
+    cd "$pkgname-$pkgver"
+    export CGO_CPPFLAGS="${CPPFLAGS}"
+    export CGO_CFLAGS="${CFLAGS}"
+    export CGO_CXXFLAGS="${CXXFLAGS}"
+    export CGO_LDFLAGS="${LDFLAGS}"
+    export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+
+    go build -ldflags="-s -w -X main.Version=${pkgver}" -o sysmedic cmd/sysmedic/main.go
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+
+    # Install binary
+    install -Dm755 sysmedic "$pkgdir/usr/bin/sysmedic"
+
+    # Install systemd services
+    install -Dm644 scripts/sysmedic.doctor.service "$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+    install -Dm644 scripts/sysmedic.websocket.service "$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+
+    # Install configuration
+    install -Dm644 scripts/config.example.yaml "$pkgdir/etc/sysmedic/config.yaml"
+
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # Create directories with proper ownership
+    install -dm755 "$pkgdir/var/lib/sysmedic"
+    install -dm755 "$pkgdir/var/log/sysmedic"
+}

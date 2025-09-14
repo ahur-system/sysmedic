@@ -102,6 +102,16 @@ sudo systemctl start sysmedic.doctor
 sudo systemctl start sysmedic.websocket
 \`\`\`
 
+### Arch Linux (.pkg.tar.zst)
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst
+sudo pacman -U sysmedic-arch.pkg.tar.zst
+sudo systemctl enable sysmedic.doctor
+sudo systemctl enable sysmedic.websocket
+sudo systemctl start sysmedic.doctor
+sudo systemctl start sysmedic.websocket
+\`\`\`
+
 ### Generic Linux (tarball)
 \`\`\`bash
 wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-v${VERSION}-linux-amd64.tar.gz
@@ -174,6 +184,7 @@ sudo journalctl -u sysmedic.websocket -f
 ### Package Assets
 - \`sysmedic-amd64.deb\` - Debian/Ubuntu package
 - \`sysmedic-x86_64.rpm\` - RHEL/CentOS/Fedora package
+- \`sysmedic-arch.pkg.tar.zst\` - Arch Linux package
 - \`sysmedic-v${VERSION}-linux-amd64.tar.gz\` - Generic tarball
 - \`SHA256SUMS\` - Checksums for verification
 
@@ -204,6 +215,14 @@ sudo systemctl restart sysmedic.doctor
 sudo systemctl restart sysmedic.websocket
 \`\`\`
 
+### Arch Linux
+\`\`\`bash
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst
+sudo pacman -U sysmedic-arch.pkg.tar.zst
+sudo systemctl restart sysmedic.doctor
+sudo systemctl restart sysmedic.websocket
+\`\`\`
+
 ## 🗑️ Uninstallation
 
 ### Debian/Ubuntu
@@ -218,6 +237,13 @@ sudo dpkg -r sysmedic
 sudo systemctl stop sysmedic.doctor sysmedic.websocket
 sudo systemctl disable sysmedic.doctor sysmedic.websocket
 sudo rpm -e sysmedic
+\`\`\`
+
+### Arch Linux
+\`\`\`bash
+sudo systemctl stop sysmedic.doctor sysmedic.websocket
+sudo systemctl disable sysmedic.doctor sysmedic.websocket
+sudo pacman -R sysmedic
 \`\`\`
 
 ## 🐛 Issues & Support
@@ -282,6 +308,10 @@ check_assets() {
         missing_files+=("sysmedic-${VERSION}-1.x86_64.rpm")
     fi
 
+    if [ ! -f "dist/sysmedic-${VERSION}-1-x86_64.pkg.tar.zst" ]; then
+        missing_files+=("sysmedic-${VERSION}-1-x86_64.pkg.tar.zst")
+    fi
+
     if [ ! -f "dist/sysmedic-v${VERSION}-linux-amd64.tar.gz" ]; then
         missing_files+=("sysmedic-v${VERSION}-linux-amd64.tar.gz")
     fi
@@ -337,6 +367,9 @@ create_release() {
     if [ -f "dist/sysmedic-${VERSION}-1.x86_64.rpm" ]; then
         cp "dist/sysmedic-${VERSION}-1.x86_64.rpm" "dist/sysmedic-x86_64.rpm"
     fi
+    if [ -f "dist/sysmedic-${VERSION}-1-x86_64.pkg.tar.zst" ]; then
+        cp "dist/sysmedic-${VERSION}-1-x86_64.pkg.tar.zst" "dist/sysmedic-arch.pkg.tar.zst"
+    fi
 
     # Create release
     gh release create "$TAG" \
@@ -345,14 +378,16 @@ create_release() {
         --latest \
         "dist/sysmedic_${VERSION}_amd64.deb" \
         "dist/sysmedic-${VERSION}-1.x86_64.rpm" \
+        "dist/sysmedic-${VERSION}-1-x86_64.pkg.tar.zst" \
         "dist/sysmedic-v${VERSION}-linux-amd64.tar.gz" \
         dist/SHA256SUMS \
         "dist/sysmedic-amd64.deb" \
-        "dist/sysmedic-x86_64.rpm"
+        "dist/sysmedic-x86_64.rpm" \
+        "dist/sysmedic-arch.pkg.tar.zst"
 
     # Clean up
     rm -f "$NOTES_FILE"
-    rm -f "dist/sysmedic-amd64.deb" "dist/sysmedic-x86_64.rpm"
+    rm -f "dist/sysmedic-amd64.deb" "dist/sysmedic-x86_64.rpm" "dist/sysmedic-arch.pkg.tar.zst"
 
     print_success "Release $TAG created successfully!"
 }
@@ -395,6 +430,7 @@ main() {
     echo "📦 Download links:"
     echo "  • Debian/Ubuntu: https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-amd64.deb"
     echo "  • RHEL/CentOS:   https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-x86_64.rpm"
+    echo "  • Arch Linux:    https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst"
     echo "  • Generic:       https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-v${VERSION}-linux-amd64.tar.gz"
     echo "  • View config: $BINARY_NAME config show"
     echo ""

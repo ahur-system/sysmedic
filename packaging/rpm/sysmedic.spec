@@ -211,8 +211,9 @@ chmod 755 /var/lib/sysmedic
 chmod 644 /etc/sysmedic/config.yaml
 
 # Reload systemd and enable services
-%systemd_post sysmedic.doctor.service
-%systemd_post sysmedic.websocket.service
+systemctl daemon-reload || true
+systemctl preset sysmedic.doctor.service || systemctl enable sysmedic.doctor.service || true
+systemctl preset sysmedic.websocket.service || systemctl enable sysmedic.websocket.service || true
 
 echo "SysMedic has been installed successfully!"
 echo "Configuration file: /etc/sysmedic/config.yaml"
@@ -230,12 +231,21 @@ echo "  sudo journalctl -u sysmedic.doctor -f"
 echo "  sudo journalctl -u sysmedic.websocket -f"
 
 %preun
-%systemd_preun sysmedic.doctor.service
-%systemd_preun sysmedic.websocket.service
+if [ $1 -eq 0 ]; then
+    # Package removal, not upgrade
+    systemctl --no-reload disable sysmedic.doctor.service || true
+    systemctl stop sysmedic.doctor.service || true
+    systemctl --no-reload disable sysmedic.websocket.service || true
+    systemctl stop sysmedic.websocket.service || true
+fi
 
 %postun
-%systemd_postun_with_restart sysmedic.doctor.service
-%systemd_postun_with_restart sysmedic.websocket.service
+systemctl daemon-reload || true
+if [ $1 -ge 1 ]; then
+    # Package upgrade, not removal
+    systemctl try-restart sysmedic.doctor.service || true
+    systemctl try-restart sysmedic.websocket.service || true
+fi
 
 if [ $1 -eq 0 ]; then
     # Complete removal

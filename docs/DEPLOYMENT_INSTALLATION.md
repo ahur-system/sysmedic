@@ -60,6 +60,24 @@ sudo dnf install -y golang git curl wget rpm-build ruby-devel
 gem install fpm
 ```
 
+#### Arch Linux Build Environment
+```bash
+# Update system
+sudo pacman -Syu
+
+# Install build tools
+sudo pacman -S --needed base-devel go git curl wget ruby
+
+# Install FPM for cross-platform packaging
+sudo gem install fpm
+
+# Install makepkg and AUR helper (optional)
+sudo pacman -S --needed devtools namcap
+
+# For AUR package development
+sudo pacman -S --needed git openssh
+```
+
 #### Docker Build Environment
 ```dockerfile
 FROM ubuntu:22.04
@@ -201,7 +219,64 @@ fpm -s dir -t rpm -n sysmedic -v 1.0.5 \
     scripts/config.example.yaml=/etc/sysmedic/config.yaml
 ```
 
-##### 5. Create Generic Archive
+##### 5. Build Arch Package
+```bash
+# Create PKGBUILD for Arch Linux
+mkdir -p packaging/arch
+cat > packaging/arch/PKGBUILD << 'EOF'
+# Maintainer: SysMedic Team <team@sysmedic.dev>
+pkgname=sysmedic
+pkgver=1.0.5
+pkgrel=1
+pkgdesc="Single binary multi-daemon Linux system monitoring tool with user-centric resource tracking"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ahur-system/sysmedic"
+license=('MIT')
+depends=('systemd')
+makedepends=('go' 'git')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/ahur-system/sysmedic/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # Update with actual checksums
+
+build() {
+    cd "$pkgname-$pkgver"
+    export CGO_CPPFLAGS="${CPPFLAGS}"
+    export CGO_CFLAGS="${CFLAGS}"
+    export CGO_CXXFLAGS="${CXXFLAGS}"
+    export CGO_LDFLAGS="${LDFLAGS}"
+    export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+    
+    go build -ldflags="-s -w -X main.Version=${pkgver}" -o sysmedic cmd/sysmedic/main.go
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    
+    # Install binary
+    install -Dm755 sysmedic "$pkgdir/usr/bin/sysmedic"
+    
+    # Install systemd services
+    install -Dm644 scripts/sysmedic.doctor.service "$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+    install -Dm644 scripts/sysmedic.websocket.service "$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+    
+    # Install configuration
+    install -Dm644 scripts/config.example.yaml "$pkgdir/etc/sysmedic/config.yaml"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    
+    # Create directories
+    install -dm755 "$pkgdir/var/lib/sysmedic"
+    install -dm755 "$pkgdir/var/log/sysmedic"
+}
+EOF
+
+# Build Arch package
+cd packaging/arch
+makepkg -sf --noconfirm
+```
+
+##### 6. Create Generic Archive
 ```bash
 # Create tar.gz archive
 tar -czf sysmedic-v1.0.5-linux-amd64.tar.gz \
@@ -216,10 +291,11 @@ tar -czf sysmedic-v1.0.5-linux-amd64.tar.gz \
 
 | Package Type | Filename | Size | Target Distribution |
 |--------------|----------|------|-------------------|
-| **Debian/Ubuntu** | `sysmedic_1.0.5_amd64.deb` | ~2.1MB | Debian, Ubuntu, derivatives |
-| **RHEL/CentOS** | `sysmedic-1.0.5-1.x86_64.rpm` | ~2.4MB | RHEL, CentOS, Fedora, SUSE |
-| **Generic Linux** | `sysmedic-v1.0.5-linux-amd64.tar.gz` | ~2.4MB | Any Linux x86_64 |
-| **ARM64 Linux** | `sysmedic-v1.0.5-linux-arm64.tar.gz` | ~2.2MB | ARM64 Linux systems |
+| **Debian/Ubuntu** | `sysmedic_1.0.5_amd64.deb` | ~4.1MB | Debian, Ubuntu, derivatives |
+| **RHEL/CentOS** | `sysmedic-1.0.5-1.x86_64.rpm` | ~4.7MB | RHEL, CentOS, Fedora, SUSE |
+| **Arch Linux** | `sysmedic-1.0.5-1-x86_64.pkg.tar.zst` | ~4.1MB | Arch Linux, Manjaro |
+| **Generic Linux** | `sysmedic-v1.0.5-linux-amd64.tar.gz` | ~4.7MB | Any Linux x86_64 |
+| **ARM64 Linux** | `sysmedic-v1.0.5-linux-arm64.tar.gz` | ~4.5MB | ARM64 Linux systems |
 | **Checksums** | `SHA256SUMS` | ~1KB | Verification file |
 
 ### Automated Build Script
@@ -287,6 +363,47 @@ fpm -s dir -t rpm -n sysmedic -v ${VERSION} \
     scripts/sysmedic.websocket.service=/etc/systemd/system/sysmedic.websocket.service \
     scripts/config.example.yaml=/etc/sysmedic/config.yaml
 
+# Build Arch package (if on Arch system or with makepkg available)
+if command -v makepkg >/dev/null 2>&1; then
+    echo "Building Arch package..."
+    mkdir -p ${OUTPUT_DIR}/arch
+    
+    # Create PKGBUILD
+    cat > ${OUTPUT_DIR}/arch/PKGBUILD << EOF
+pkgname=sysmedic-bin
+pkgver=${VERSION}
+pkgrel=1
+pkgdesc="Single binary multi-daemon Linux system monitoring tool"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ahur-system/sysmedic"
+license=('MIT')
+depends=('systemd')
+provides=('sysmedic')
+conflicts=('sysmedic')
+
+package() {
+    install -Dm755 "${OUTPUT_DIR}/sysmedic" "\$pkgdir/usr/bin/sysmedic"
+    install -Dm644 "scripts/sysmedic.doctor.service" "\$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+    install -Dm644 "scripts/sysmedic.websocket.service" "\$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+    install -Dm644 "scripts/config.example.yaml" "\$pkgdir/etc/sysmedic/config.yaml"
+    install -dm755 "\$pkgdir/var/lib/sysmedic"
+    install -dm755 "\$pkgdir/var/log/sysmedic"
+}
+EOF
+    
+    # Set compression to zstd for proper .pkg.tar.zst creation
+    export PKGEXT='.pkg.tar.zst'
+    export COMPRESSZST=(zstd -c -T0 --ultra -20 -)
+        
+    # Build package
+    cd ${OUTPUT_DIR}/arch
+    makepkg -sf --noconfirm
+    mv *.pkg.tar.zst ../ 2>/dev/null || true
+    cd ../..
+else
+    echo "Skipping Arch package build (makepkg not available)"
+fi
+
 # Create generic archive
 echo "Creating generic archive..."
 cd ${OUTPUT_DIR}
@@ -301,7 +418,7 @@ cd ..
 # Generate checksums
 echo "Generating checksums..."
 cd ${OUTPUT_DIR}
-sha256sum *.deb *.rpm *.tar.gz > SHA256SUMS
+sha256sum *.deb *.rpm *.tar.gz *.pkg.tar.zst > SHA256SUMS 2>/dev/null || sha256sum *.deb *.rpm *.tar.gz > SHA256SUMS
 cd ..
 
 echo "Build complete! Packages available in ${OUTPUT_DIR}/"
@@ -409,8 +526,17 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y rpm ruby-dev
+        sudo apt-get install -y rpm ruby-dev libarchive-tools
         sudo gem install fpm
+        
+        # Install makepkg for Arch package building
+        wget https://github.com/archlinux/pacman/archive/v6.0.2.tar.gz
+        tar -xzf v6.0.2.tar.gz
+        cd pacman-6.0.2
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
+        make -j$(nproc)
+        sudo make install
+        cd ..
     
     - name: Get version
       id: version
@@ -427,6 +553,37 @@ jobs:
       run: |
         export VERSION=${{ steps.version.outputs.VERSION }}
         make packages
+        
+        # Build Arch package if possible
+        if command -v makepkg >/dev/null 2>&1; then
+          cd dist
+          mkdir -p arch
+          cat > arch/PKGBUILD << EOF
+        pkgname=sysmedic-bin
+        pkgver=${VERSION#v}
+        pkgrel=1
+        pkgdesc="Single binary multi-daemon Linux system monitoring tool"
+        arch=('x86_64')
+        url="https://github.com/ahur-system/sysmedic"
+        license=('MIT')
+        depends=('systemd')
+        provides=('sysmedic')
+        conflicts=('sysmedic')
+        
+        package() {
+            install -Dm755 "../sysmedic" "\$pkgdir/usr/bin/sysmedic"
+            install -Dm644 "../../scripts/sysmedic.doctor.service" "\$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+            install -Dm644 "../../scripts/sysmedic.websocket.service" "\$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+            install -Dm644 "../../scripts/config.example.yaml" "\$pkgdir/etc/sysmedic/config.yaml"
+            install -dm755 "\$pkgdir/var/lib/sysmedic"
+            install -dm755 "\$pkgdir/var/log/sysmedic"
+        }
+        EOF
+          cd arch
+          makepkg -sf --noconfirm || echo "Failed to build Arch package"
+          mv *.pkg.tar.zst ../ 2>/dev/null || true
+          cd ../..
+        fi
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
@@ -442,6 +599,7 @@ jobs:
         files: |
           dist/*.deb
           dist/*.rpm
+          dist/*.pkg.tar.zst
           dist/*.tar.gz
           dist/SHA256SUMS
         body_path: CHANGELOG.md
@@ -473,6 +631,18 @@ jobs:
           dpkg -i /packages/*.deb || apt-get -f install -y
           sysmedic --version
           systemctl enable sysmedic.doctor sysmedic.websocket
+        "
+        
+    - name: Test Arch installation
+      if: matrix.os == 'archlinux:latest'
+      run: |
+        docker run --rm -v $(pwd)/dist:/packages archlinux:latest bash -c "
+          pacman -Sy --noconfirm
+          pacman -U --noconfirm /packages/*.pkg.tar.zst || echo 'No Arch package found'
+          if command -v sysmedic >/dev/null; then
+            sysmedic --version
+            systemctl enable sysmedic.doctor sysmedic.websocket
+          fi
         "
 
   security-scan:
@@ -510,6 +680,7 @@ gh release create v1.0.5 \
     --notes-file CHANGELOG.md \
     dist/*.deb \
     dist/*.rpm \
+    dist/*.pkg.tar.zst \
     dist/*.tar.gz \
     dist/SHA256SUMS
 
@@ -551,6 +722,42 @@ sudo rpm -ivh sysmedic-1.0.5-1.x86_64.rpm
 sudo yum install https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-1.0.5-1.x86_64.rpm
 # or
 sudo dnf install https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-1.0.5-1.x86_64.rpm
+
+# Enable and start services
+sudo systemctl daemon-reload
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+sudo systemctl start sysmedic.doctor sysmedic.websocket
+
+# Verify installation
+sysmedic --version
+sysmedic daemon status
+```
+
+#### Arch Linux (.pkg.tar.zst)
+```bash
+# Method 1: Direct download and install (latest release)
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-arch.pkg.tar.zst
+sudo pacman -U sysmedic-arch.pkg.tar.zst
+
+# Method 2: Direct download and install (specific version)
+wget https://github.com/ahur-system/sysmedic/releases/latest/download/sysmedic-1.0.5-1-x86_64.pkg.tar.zst
+sudo pacman -U sysmedic-1.0.5-1-x86_64.pkg.tar.zst
+
+# Verify package format (optional)
+file sysmedic-arch.pkg.tar.zst
+# Should show: Zstandard compressed data (v0.8+), Dictionary ID: None
+
+# Method 3: Install from AUR (when available)
+# Using yay AUR helper
+yay -S sysmedic
+
+# Using paru AUR helper  
+paru -S sysmedic
+
+# Method 4: Manual AUR build
+git clone https://aur.archlinux.org/sysmedic.git
+cd sysmedic
+makepkg -si
 
 # Enable and start services
 sudo systemctl daemon-reload
@@ -677,6 +884,14 @@ install_package() {
                 rpm -ivh /tmp/sysmedic.rpm
                 rm /tmp/sysmedic.rpm
             fi
+            return 0
+            ;;
+        arch|manjaro)
+            log_info "Installing Arch package..."
+            local pkg_url="https://github.com/${GITHUB_REPO}/releases/latest/download/sysmedic-${VERSION}-1-x86_64.pkg.tar.zst"
+            wget -q $pkg_url -O /tmp/sysmedic.pkg.tar.zst
+            pacman -U --noconfirm /tmp/sysmedic.pkg.tar.zst
+            rm /tmp/sysmedic.pkg.tar.zst
             return 0
             ;;
     esac
@@ -884,6 +1099,124 @@ volumes:
   sysmedic-data:
 ```
 
+### AUR (Arch User Repository) Support
+
+#### Publishing to AUR
+```bash
+# Clone AUR repository (requires AUR account)
+git clone ssh://aur@aur.archlinux.org/sysmedic.git aur-sysmedic
+cd aur-sysmedic
+
+# Create/Update PKGBUILD
+cat > PKGBUILD << 'EOF'
+# Maintainer: SysMedic Team <team@sysmedic.dev>
+pkgname=sysmedic
+pkgver=1.0.5
+pkgrel=1
+pkgdesc="Single binary multi-daemon Linux system monitoring tool with user-centric resource tracking"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ahur-system/sysmedic"
+license=('MIT')
+depends=('systemd')
+makedepends=('go' 'git')
+backup=('etc/sysmedic/config.yaml')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/ahur-system/sysmedic/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # Update with actual checksums
+
+build() {
+    cd "$pkgname-$pkgver"
+    export CGO_CPPFLAGS="${CPPFLAGS}"
+    export CGO_CFLAGS="${CFLAGS}"
+    export CGO_CXXFLAGS="${CXXFLAGS}"
+    export CGO_LDFLAGS="${LDFLAGS}"
+    export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+    
+    go build -ldflags="-s -w -X main.Version=${pkgver}" -o sysmedic cmd/sysmedic/main.go
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    # Add tests when available
+    # go test -v ./...
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    
+    # Install binary
+    install -Dm755 sysmedic "$pkgdir/usr/bin/sysmedic"
+    
+    # Install systemd services
+    install -Dm644 scripts/sysmedic.doctor.service "$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+    install -Dm644 scripts/sysmedic.websocket.service "$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+    
+    # Install configuration
+    install -Dm644 scripts/config.example.yaml "$pkgdir/etc/sysmedic/config.yaml"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    
+    # Create data and log directories
+    install -dm755 "$pkgdir/var/lib/sysmedic"
+    install -dm755 "$pkgdir/var/log/sysmedic"
+}
+EOF
+
+# Create .SRCINFO
+makepkg --printsrcinfo > .SRCINFO
+
+# Commit and push to AUR
+git add PKGBUILD .SRCINFO
+git commit -m "Update to version $pkgver"
+git push origin master
+```
+
+#### AUR Binary Package
+```bash
+# For users who prefer pre-built binaries, create sysmedic-bin package
+cat > PKGBUILD << 'EOF'
+# Maintainer: SysMedic Team <team@sysmedic.dev>
+pkgname=sysmedic-bin
+pkgver=1.0.5
+pkgrel=1
+pkgdesc="Single binary multi-daemon Linux system monitoring tool (binary release)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ahur-system/sysmedic"
+license=('MIT')
+depends=('systemd')
+provides=('sysmedic')
+conflicts=('sysmedic')
+backup=('etc/sysmedic/config.yaml')
+source_x86_64=("https://github.com/ahur-system/sysmedic/releases/download/v$pkgver/sysmedic-v$pkgver-linux-amd64.tar.gz")
+source_aarch64=("https://github.com/ahur-system/sysmedic/releases/download/v$pkgver/sysmedic-v$pkgver-linux-arm64.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+    # Extract and install binary
+    install -Dm755 sysmedic "$pkgdir/usr/bin/sysmedic"
+    
+    # Install systemd services
+    install -Dm644 scripts/sysmedic.doctor.service "$pkgdir/usr/lib/systemd/system/sysmedic.doctor.service"
+    install -Dm644 scripts/sysmedic.websocket.service "$pkgdir/usr/lib/systemd/system/sysmedic.websocket.service"
+    
+    # Install configuration
+    install -Dm644 scripts/config.example.yaml "$pkgdir/etc/sysmedic/config.yaml"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md" 2>/dev/null || true
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    
+    # Create data and log directories
+    install -dm755 "$pkgdir/var/lib/sysmedic"
+    install -dm755 "$pkgdir/var/log/sysmedic"
+}
+EOF
+```
+
 ### Package Verification
 
 #### Checksum Verification
@@ -897,6 +1230,9 @@ sha256sum -c SHA256SUMS --ignore-missing
 # Manual verification
 sha256sum sysmedic_1.0.5_amd64.deb
 # Compare with value in SHA256SUMS file
+
+# Verify Arch package
+sha256sum sysmedic-1.0.5-1-x86_64.pkg.tar.zst
 ```
 
 #### GPG Signature Verification (Future)
@@ -912,4 +1248,315 @@ gpg --verify sysmedic_1.0.5_amd64.deb.sig sysmedic_1.0.5_amd64.deb
 
 ### Version Numbering
 
-SysMedic follows [
+SysMedic follows [Semantic Versioning](https://semver.org/) (SemVer):
+
+- **MAJOR.MINOR.PATCH** (e.g., 1.0.5)
+- **MAJOR**: Breaking changes to API or core functionality
+- **MINOR**: New features, backward compatible
+- **PATCH**: Bug fixes, backward compatible
+- **Pre-release**: alpha, beta, rc suffixes (e.g., 1.1.0-alpha.1)
+
+### Release Process
+
+#### 1. Pre-Release Preparation
+```bash
+# Update version in relevant files
+VERSION="1.0.6"
+
+# Update CHANGELOG.md
+echo "## [$VERSION] - $(date +%Y-%m-%d)" >> CHANGELOG.md
+echo "" >> CHANGELOG.md
+echo "### Added" >> CHANGELOG.md
+echo "### Changed" >> CHANGELOG.md
+echo "### Fixed" >> CHANGELOG.md
+
+# Update version in Go files (if using ldflags injection)
+# No changes needed as version is injected during build
+```
+
+#### 2. Tag and Release
+```bash
+# Create and push tag
+git add CHANGELOG.md
+git commit -m "Release v$VERSION"
+git tag -a "v$VERSION" -m "Release version $VERSION"
+git push origin main --tags
+
+# GitHub Actions will automatically create the release
+```
+
+#### 3. Post-Release Tasks
+```bash
+# Update AUR packages
+cd aur-sysmedic
+# Update PKGBUILD with new version and checksums
+makepkg --printsrcinfo > .SRCINFO
+git add PKGBUILD .SRCINFO
+git commit -m "Update to version $VERSION"
+git push
+
+# Update documentation
+# Update homebrew formula (if applicable)
+# Notify package maintainers
+```
+
+## Distribution Channels
+
+### Primary Distribution
+- **GitHub Releases**: Official source for all packages
+- **Package Repositories**: Distribution-specific packages
+- **Container Registries**: Docker images on GitHub Container Registry
+
+### Package Repositories
+
+#### Debian/Ubuntu PPA (Future)
+```bash
+# Add PPA repository
+sudo add-apt-repository ppa:sysmedic/stable
+sudo apt update
+sudo apt install sysmedic
+```
+
+#### RPM Repository (Future)
+```bash
+# Add RPM repository
+sudo tee /etc/yum.repos.d/sysmedic.repo << EOF
+[sysmedic]
+name=SysMedic Repository
+baseurl=https://repo.sysmedic.dev/rpm
+enabled=1
+gpgcheck=1
+gpgkey=https://repo.sysmedic.dev/gpg-key/sysmedic.asc
+EOF
+
+sudo yum install sysmedic
+```
+
+#### Arch User Repository (AUR)
+```bash
+# Available packages
+yay -S sysmedic        # Build from source
+yay -S sysmedic-bin    # Pre-built binary
+yay -S sysmedic-git    # Latest development version
+```
+
+## Automated Deployment
+
+### CI/CD Pipeline Features
+- **Multi-platform builds**: Linux x64, ARM64
+- **Package creation**: DEB, RPM, Arch, tar.gz
+- **Security scanning**: Vulnerability assessment
+- **Automated testing**: Package installation verification
+- **Release automation**: GitHub releases with assets
+- **Container publishing**: Multi-arch Docker images
+
+### Deployment Environments
+- **Development**: Feature branches, PR builds
+- **Staging**: Release candidate testing
+- **Production**: Tagged releases, stable packages
+
+## Troubleshooting
+
+### Build Issues
+
+#### Go Environment Problems
+```bash
+# Issue: Go version too old
+go version  # Check current version
+# Solution: Install Go 1.21+
+wget https://golang.org/dl/go1.21.3.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
+
+# Issue: Module download failures
+export GOPROXY=https://proxy.golang.org,direct
+export GOSUMDB=sum.golang.org
+go mod download
+
+# Issue: CGO compilation errors
+export CGO_ENABLED=1
+sudo apt-get install build-essential  # Debian/Ubuntu
+sudo yum groupinstall "Development Tools"  # RHEL/CentOS
+```
+
+#### Package Building Problems
+```bash
+# Issue: FPM not found
+gem install fpm
+# Or on system with restricted gem installation:
+sudo apt-get install ruby-dev
+sudo gem install fpm
+
+# Issue: RPM building fails on Debian/Ubuntu
+sudo apt-get install rpm
+
+# Issue: Missing dependencies
+sudo apt-get install build-essential git curl wget
+```
+
+#### Arch Linux Specific Issues
+```bash
+# Issue: makepkg fails with permissions
+chmod +x PKGBUILD
+makepkg -s --noconfirm
+
+# Issue: Missing base-devel
+sudo pacman -S --needed base-devel
+
+# Issue: Go module verification fails
+export GOPROXY=direct
+export GOSUMDB=off
+
+# Issue: Package installation conflicts
+sudo pacman -R sysmedic-bin  # Remove conflicting package
+sudo pacman -S sysmedic
+
+# Issue: AUR package build fails
+# Check .SRCINFO is up to date
+makepkg --printsrcinfo > .SRCINFO
+
+# Issue: systemd service files not found
+sudo systemctl daemon-reload
+sudo systemctl enable sysmedic.doctor sysmedic.websocket
+```
+
+### Installation Issues
+
+#### Permission Problems
+```bash
+# Issue: Cannot create directories
+sudo mkdir -p /etc/sysmedic /var/lib/sysmedic /var/log/sysmedic
+sudo chown -R root:root /etc/sysmedic /var/lib/sysmedic /var/log/sysmedic
+
+# Issue: Binary not executable
+sudo chmod +x /usr/local/bin/sysmedic
+# or
+sudo chmod +x /usr/bin/sysmedic
+```
+
+#### Service Issues
+```bash
+# Issue: Services fail to start
+sudo systemctl status sysmedic.doctor
+sudo systemctl status sysmedic.websocket
+sudo journalctl -u sysmedic.doctor -f
+
+# Issue: Port conflicts
+sudo netstat -tlnp | grep :8060
+# Change port in /etc/sysmedic/config.yaml
+
+# Issue: Missing systemd services
+sudo systemctl daemon-reload
+ls -la /etc/systemd/system/sysmedic.*
+```
+
+#### Arch Linux Installation Issues
+```bash
+# Issue: Package not found
+pacman -Ss sysmedic
+yay -Ss sysmedic
+
+# Issue: Dependency conflicts
+sudo pacman -S --needed systemd
+sudo pacman -Syu  # Update system first
+
+# Issue: AUR helper problems
+# Install yay if not available
+sudo pacman -S --needed git base-devel
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si
+
+# Issue: Package signature verification
+sudo pacman -S archlinux-keyring
+sudo pacman-key --refresh-keys
+```
+
+### Runtime Issues
+
+#### Configuration Problems
+```bash
+# Issue: Config file not found
+ls -la /etc/sysmedic/config.yaml
+# Copy from example if missing
+sudo cp /usr/share/doc/sysmedic/config.example.yaml /etc/sysmedic/config.yaml
+
+# Issue: Invalid YAML syntax
+sysmedic --config /etc/sysmedic/config.yaml --validate
+```
+
+#### Performance Issues
+```bash
+# Issue: High memory usage
+# Check memory limits in systemd service
+sudo systemctl edit sysmedic.doctor
+# Add:
+# [Service]
+# MemoryLimit=512M
+
+# Issue: High CPU usage
+# Check monitoring intervals in config
+sudo nano /etc/sysmedic/config.yaml
+```
+
+#### Network Issues
+```bash
+# Issue: WebSocket connection fails
+sudo firewall-cmd --add-port=8060/tcp --permanent  # RHEL/CentOS
+sudo ufw allow 8060/tcp  # Ubuntu
+sudo iptables -A INPUT -p tcp --dport 8060 -j ACCEPT  # Generic
+
+# Issue: Cannot bind to port
+sudo lsof -i :8060
+# Kill conflicting process or change port
+```
+
+### Getting Help
+
+#### Log Files
+```bash
+# System logs
+sudo journalctl -u sysmedic.doctor -f
+sudo journalctl -u sysmedic.websocket -f
+
+# Application logs
+sudo tail -f /var/log/sysmedic/sysmedic.log
+sudo tail -f /var/log/sysmedic/error.log
+```
+
+#### Debug Mode
+```bash
+# Enable debug logging
+sysmedic --debug --doctor-daemon
+sysmedic --debug --websocket-daemon
+
+# Or edit config file
+sudo nano /etc/sysmedic/config.yaml
+# Set log_level: debug
+```
+
+#### Support Channels
+- **GitHub Issues**: https://github.com/ahur-system/sysmedic/issues
+- **Documentation**: https://docs.sysmedic.dev
+- **Community**: GitHub Discussions
+- **Security Issues**: security@sysmedic.dev
+
+#### Diagnostic Information
+```bash
+# Collect system information for bug reports
+sysmedic --version
+uname -a
+cat /etc/os-release
+systemctl status sysmedic.doctor sysmedic.websocket
+cat /etc/sysmedic/config.yaml
+sudo journalctl -u sysmedic.doctor --since "1 hour ago" --no-pager
+```
+
+---
+
+**End of Documentation**
+
+For the latest updates and additional information, visit:
+- **Project Homepage**: https://github.com/ahur-system/sysmedic
+- **Documentation**: https://docs.sysmedic.dev
+- **Releases**: https://github.com/ahur-system/sysmedic/releases
